@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
+// Use named export
 export const OverdueLoansPage = () => {
   const [overdueLoans, setOverdueLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -9,22 +10,28 @@ export const OverdueLoansPage = () => {
   useEffect(() => {
     const fetchOverdueLoans = async () => {
       try {
+        // THE FIX IS HERE: Ensure the URL is exactly '/api/loans/overdue'
         const response = await axios.get('http://localhost:3001/api/loans/overdue');
         setOverdueLoans(response.data);
       } catch (error) {
         console.error("Error fetching overdue loans:", error);
+        // Optionally: Add user-facing error state here
       } finally {
         setIsLoading(false);
       }
     };
     fetchOverdueLoans();
-  }, []);
+  }, []); // Empty dependency array means this runs once on mount
 
-  if (isLoading) return <div>Loading overdue loans...</div>;
+  if (isLoading) {
+    return <div className="text-center mt-5">Loading overdue loans...</div>;
+  }
 
   return (
     <div className="card border-danger shadow-sm">
-      <div className="card-header text-white bg-danger"><h3>Overdue Loans</h3></div>
+      <div className="card-header text-white bg-danger">
+        <h3>Overdue Loans</h3>
+      </div>
       <div className="card-body">
         {overdueLoans.length > 0 ? (
           <div className="list-group">
@@ -35,7 +42,7 @@ export const OverdueLoansPage = () => {
                   <small className="text-danger fw-bold">Due: {new Date(loan.due_date).toLocaleDateString()}</small>
                 </div>
                 <p className="mb-1">Amount: ₹{loan.principal_amount} | Book #: {loan.book_loan_number}</p>
-                 <small className="text-muted">Pledged On: {new Date(loan.pledge_date).toLocaleDateString()}</small>
+                <small className="text-muted">Pledged On: {new Date(loan.pledge_date).toLocaleDateString()}</small>
               </Link>
             ))}
           </div>
