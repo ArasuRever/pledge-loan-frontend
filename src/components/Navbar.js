@@ -31,7 +31,10 @@ function Navbar() {
             <Link className="nav-link" to="/loans">Loans</Link>
           </li>
           <li className="nav-item">
-        <Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link>
+            <Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link>
+          </li>
+          <li className="nav-item">
+            <Link className="nav-link text-success fw-bold" to="/new-loan">New Loan</Link>
           </li>
         </ul>
         <form className="d-flex" onSubmit={handleSearch}>

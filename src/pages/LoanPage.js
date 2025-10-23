@@ -42,6 +42,26 @@ function LoanPage() {
 
   return (
     <div>
+      <div className="card border-primary shadow-sm mb-4">
+          <div className="card-body">
+              <h4 className="card-title">Customer Information</h4>
+              <div className="d-flex align-items-center">
+                  {loanDetails.customer_image_url && (
+                      <img 
+                          src={loanDetails.customer_image_url} 
+                          alt={`${loanDetails.customer_name}'s photo`}
+                          style={{ width: '60px', height: '60px', borderRadius: '50%', marginRight: '15px', objectFit: 'cover' }} 
+                      />
+                  )}
+                  <div>
+                      <h5>{loanDetails.customer_name}</h5>
+                      <p className="mb-0">Phone: {loanDetails.phone_number}</p>
+                  </div>
+              </div>
+              <hr/>
+              <p className="mb-0">Back to <Link to={`/customers/${loanDetails.customer_id}`}>{loanDetails.customer_name}'s Profile</Link></p>
+          </div>
+      </div>
       <h3>Loan Details (ID: {id})</h3>
       <p><strong>Book Loan #:</strong> {loanDetails.book_loan_number}</p>
       <p><strong>Status:</strong> {loanDetails.status}</p>

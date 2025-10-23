@@ -7,6 +7,7 @@ import LoanPage from './pages/LoanPage';
 import { OverdueLoansPage } from './pages/OverdueLoansPage';
 import AllLoansPage from './pages/AllLoansPage';
 import Navbar from './components/Navbar';
+import NewLoanWorkflowPage from './pages/NewLoanWorkflowPage';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="/overdue" element={<OverdueLoansPage />} />
           <Route path="/customers/:id" element={<CustomerPage />} />
           <Route path="/loans/:id" element={<LoanPage />} />
+          <Route path="/new-loan" element={<NewLoanWorkflowPage />} />
         </Routes>
       </div>
     </Router>

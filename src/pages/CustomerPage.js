@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import LoanForm from '../components/LoanForm';
+import EditCustomerForm from '../components/EditCustomerForm';
 
 function CustomerPage() {
   const { id } = useParams();
@@ -9,6 +10,7 @@ function CustomerPage() {
   const [loans, setLoans] = useState([]); // State for loans list
   const [isLoading, setIsLoading] = useState(true); // Loading state
   const [error, setError] = useState(null); // Error state
+  const [isEditing, setIsEditing] = useState(false); // <-- NEW STATE
 
   // Function to fetch all data for this page
   const fetchData = async () => {
@@ -64,6 +66,18 @@ function CustomerPage() {
      return <div>Could not load customer data.</div>;
   }
 
+  if (isEditing) {
+      return (
+          <EditCustomerForm 
+              customer={customer} 
+              onUpdate={() => { 
+                  setIsEditing(false); // Exit edit mode
+                  fetchData();         // Refresh data
+              }}
+              onCancel={() => setIsEditing(false)} // Exit edit mode
+          />
+      );
+  }
   // Filter loans after data is confirmed to be loaded
   const activeLoans = loans.filter(loan => loan.status === 'active' || loan.status === 'overdue');
   const closedLoans = loans.filter(loan => loan.status === 'paid' || loan.status === 'forfeited');
@@ -71,6 +85,13 @@ function CustomerPage() {
   // --- Main component render ---
   return (
     <div>
+      {/* --- EDIT BUTTON --- */}
+      <div className="d-flex justify-content-end mb-3">
+        <button className="btn btn-outline-warning" onClick={() => setIsEditing(true)}>
+          Edit Profile & Photo
+        </button>
+      </div>
+
       {/* Display Photo */}
       {customer.customer_image_url && (
         <img 
