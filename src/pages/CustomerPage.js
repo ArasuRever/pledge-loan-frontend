@@ -6,97 +6,66 @@ import EditCustomerForm from '../components/EditCustomerForm';
 
 function CustomerPage() {
   const { id } = useParams();
-  const [customer, setCustomer] = useState(null); // State for customer details
-  const [loans, setLoans] = useState([]); // State for loans list
-  const [isLoading, setIsLoading] = useState(true); // Loading state
-  const [error, setError] = useState(null); // Error state
-  const [isEditing, setIsEditing] = useState(false); // <-- NEW STATE
+  const [customer, setCustomer] = useState(null);
+  const [loans, setLoans] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // State to trigger refresh
 
-  // Function to fetch all data for this page
-  const fetchData = async () => {
-    setIsLoading(true); // Start loading
-    setError(null); // Clear previous errors
-    try {
-      // Fetch customer details and loans in parallel
-      const customerPromise = axios.get(`http://localhost:3001/api/customers/${id}`);
-      const loansPromise = axios.get(`http://localhost:3001/api/customers/${id}/loans`);
-
-      const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
-
-      setCustomer(customerResponse.data);
-      setLoans(loansResponse.data);
-
-    } catch (err) {
-      console.error("Error fetching customer data:", err);
-      // Set specific error based on response, or generic error
-      if (err.response && err.response.status === 404) {
-         setError("Customer not found.");
-      } else {
-         setError("An error occurred while fetching data.");
-      }
-    } finally {
-      setIsLoading(false); // Stop loading regardless of success/fail
-    }
-  };
-
-  // Run fetchData once when the component mounts or the ID changes
   useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const customerPromise = axios.get(`http://localhost:3001/api/customers/${id}`);
+        const loansPromise = axios.get(`http://localhost:3001/api/customers/${id}/loans`);
+        const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
+        setCustomer(customerResponse.data);
+        setLoans(loansResponse.data);
+      } catch (err) {
+        console.error("Error fetching customer data:", err);
+        setError("Customer not found or an error occurred.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     fetchData();
-  }, [id]); // Dependency array includes 'id'
+  }, [id, refreshTrigger]); // Add refreshTrigger as dependency
 
-  // --- Render logic based on state ---
-
-  if (isLoading) {
-    return <div>Loading customer details...</div>; // Show loading indicator
-  }
-
-  if (error) {
-    // Show error message if something went wrong
-    return (
-        <div>
-            <h2>Error</h2>
-            <p>{error}</p>
-            <Link to="/customers" className="btn btn-secondary">Go back to Customers</Link>
-        </div>
-    );
-  }
-
-  if (!customer) {
-     // Should not happen if loading/error states are correct, but good safety check
-     return <div>Could not load customer data.</div>;
-  }
+  if (isLoading) return <div>Loading customer details...</div>;
+  if (error) return <div><p>{error}</p><Link to="/customers">Go back to Customers</Link></div>;
+  if (!customer) return null;
 
   if (isEditing) {
       return (
           <EditCustomerForm 
               customer={customer} 
               onUpdate={() => { 
-                  setIsEditing(false); // Exit edit mode
-                  fetchData();         // Refresh data
+                  setIsEditing(false);
+                  setRefreshTrigger(t => t + 1); // Trigger a refresh
               }}
-              onCancel={() => setIsEditing(false)} // Exit edit mode
+              onCancel={() => setIsEditing(false)}
           />
       );
   }
-  // Filter loans after data is confirmed to be loaded
+  
   const activeLoans = loans.filter(loan => loan.status === 'active' || loan.status === 'overdue');
   const closedLoans = loans.filter(loan => loan.status === 'paid' || loan.status === 'forfeited');
 
-  // --- Main component render ---
   return (
     <div>
-      {/* --- EDIT BUTTON --- */}
       <div className="d-flex justify-content-end mb-3">
         <button className="btn btn-outline-warning" onClick={() => setIsEditing(true)}>
           Edit Profile & Photo
         </button>
       </div>
 
-      {/* Display Photo */}
       {customer.customer_image_url && (
         <img 
           src={customer.customer_image_url} 
-          alt={`${customer.name}'s photo`}
+          alt={customer.name} // Fix for redundant-alt warning
           style={{ maxWidth: '150px', maxHeight: '150px', marginBottom: '15px', display: 'block', borderRadius: '5px' }} 
         />
       )}
@@ -105,11 +74,12 @@ function CustomerPage() {
       <p><strong>Phone:</strong> {customer.phone_number}</p>
       <p><strong>Address:</strong> {customer.address}</p>
 
-      <LoanForm customerId={id} onLoanAdded={fetchData} />
+      {/* Pass the refresh function to the form */}
+      <LoanForm customerId={id} onLoanAdded={() => setRefreshTrigger(t => t + 1)} />
 
       <hr />
-
-      <div className="mt-4">
+      
+       <div className="mt-4">
         <h3>Active Loans</h3>
         {activeLoans.length > 0 ? (
           <div className="list-group">
@@ -140,7 +110,7 @@ function CustomerPage() {
           <p>No closed loans.</p>
         )}
       </div>
-
+      
       <Link to="/customers" className="btn btn-secondary mt-4">Back to Customers</Link>
     </div>
   );

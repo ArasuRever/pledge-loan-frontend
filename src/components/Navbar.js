@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-function Navbar() {
+function Navbar({ onLogout }) {
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
@@ -47,6 +47,7 @@ function Navbar() {
           />
           <button className="btn btn-outline-success" type="submit">Search</button>
         </form>
+        <button className="btn btn-outline-light" onClick={onLogout}>Logout</button>
       </div>
     </nav>
   );

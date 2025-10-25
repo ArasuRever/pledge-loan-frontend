@@ -8,20 +8,23 @@ export const OverdueLoansPage = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchOverdueLoans = async () => {
-      try {
-        // THE FIX IS HERE: Ensure the URL is exactly '/api/loans/overdue'
-        const response = await axios.get('http://localhost:3001/api/loans/overdue');
-        setOverdueLoans(response.data);
-      } catch (error) {
-        console.error("Error fetching overdue loans:", error);
-        // Optionally: Add user-facing error state here
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchOverdueLoans();
-  }, []); // Empty dependency array means this runs once on mount
+  const fetchOverdueLoans = async () => {
+    try {
+      // *** FINAL FIX: ADD CACHE BUSTER PARAMETER ***
+      const cacheBuster = Date.now();
+      const url = `http://localhost:3001/api/loans/overdue?t=${cacheBuster}`;
+
+      const response = await axios.get(url);
+
+      setOverdueLoans(response.data);
+    } catch (error) {
+      console.error("Error fetching overdue loans:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  fetchOverdueLoans();
+}, []); // Empty dependency array means this runs once on mount
 
   if (isLoading) {
     return <div className="text-center mt-5">Loading overdue loans...</div>;
@@ -36,6 +39,7 @@ export const OverdueLoansPage = () => {
         {overdueLoans.length > 0 ? (
           <div className="list-group">
             {overdueLoans.map(loan => (
+              // Link to the loan's detail page using its actual ID (which is correct)
               <Link key={loan.id} to={`/loans/${loan.id}`} className="list-group-item list-group-item-action">
                 <div className="d-flex w-100 justify-content-between">
                   <h5 className="mb-1">Loan #{loan.id} for {loan.customer_name}</h5>
