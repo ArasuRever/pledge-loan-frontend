@@ -45,7 +45,7 @@ function EditCustomerForm({ customer, onUpdate, onCancel }) {
 
         try {
             // Use PUT request for updating
-            await axios.put(`http://localhost:3001/api/customers/${customer.id}`, formData, {
+            await axios.put(`/api/customers/${customer.id}`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             alert('Customer updated successfully!');

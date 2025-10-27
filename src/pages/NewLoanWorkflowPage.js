@@ -24,7 +24,7 @@ function NewLoanWorkflowPage() {
         setSelectedCustomer(null);
 
         try {
-          const response = await axios.get('http://localhost:3001/api/customers');
+          const response = await axios.get('https://pledge-loan-api-as.onrender.com/api/customers');
           
           const results = response.data.filter(c => 
             c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

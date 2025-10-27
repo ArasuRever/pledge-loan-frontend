@@ -13,7 +13,7 @@ function LoginPage({ onLoginSuccess }) {
 
     try {
       // Make API call to the login endpoint
-      const response = await axios.post('http://localhost:3001/api/auth/login', {
+      const response = await axios.post('https://pledge-loan-api-as.onrender.com/api/auth/login', {
         username: username,
         password: password
       });

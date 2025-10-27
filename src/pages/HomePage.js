@@ -14,9 +14,9 @@ function HomePage() {
     const fetchDashboardData = async () => {
       try {
         // We'll fetch all three data points at the same time for speed
-        const statsPromise = axios.get('http://localhost:3001/api/dashboard/stats');
-        const recentPromise = axios.get('http://localhost:3001/api/loans/recent/created');
-        const closedPromise = axios.get('http://localhost:3001/api/loans/recent/closed');
+        const statsPromise = axios.get('https://pledge-loan-api-as.onrender.com/api/dashboard/stats');
+        const recentPromise = axios.get('https://pledge-loan-api-as.onrender.com/api/loans/recent/created');
+        const closedPromise = axios.get('https://pledge-loan-api-as.onrender.com/api/loans/recent/closed');
 
         // Wait for all requests to finish
         const [statsRes, recentRes, closedRes] = await Promise.all([

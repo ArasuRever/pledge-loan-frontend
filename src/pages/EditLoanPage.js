@@ -45,7 +45,7 @@ function EditLoanPage() {
         const fetchLoanData = async () => {
             setIsLoading(true); setError(null);
             try {
-                const response = await axios.get(`http://localhost:3001/api/loans/${id}`);
+                const response = await axios.get(`https://pledge-loan-api-as.onrender.com/api/loans/${id}`);
                 const data = response.data.loanDetails;
                 setLoanDetails(data);
                 setBookLoanNumber(data.book_loan_number || '');
@@ -106,7 +106,7 @@ function EditLoanPage() {
         else if (removeItemImage) { formData.append('removeItemImage', 'true'); }
 
         try {
-            const response = await axios.put(`http://localhost:3001/api/loans/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            const response = await axios.put(`https://pledge-loan-api-as.onrender.com/api/loans/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             alert(response.data.message || 'Loan updated successfully!');
             navigate(`/loans/${id}`);
         } catch (err) {

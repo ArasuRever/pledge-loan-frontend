@@ -16,6 +16,8 @@ import EditLoanPage from './pages/EditLoanPage';
 // --- Components ---
 import Navbar from './components/Navbar';
 
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
 // Helper function to set the authorization token for Axios requests
 const setAuthToken = (token) => {
   if (token) {

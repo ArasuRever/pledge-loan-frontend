@@ -12,9 +12,9 @@ export const OverdueLoansPage = () => {
     try {
       // *** FINAL FIX: ADD CACHE BUSTER PARAMETER ***
       const cacheBuster = Date.now();
-      const url = `http://localhost:3001/api/loans/overdue?t=${cacheBuster}`;
+      const url = `/api/loans/overdue?t=${cacheBuster}`;
 
-      const response = await axios.get(url);
+      const response = await axios.get('https://pledge-loan-api-as.onrender.com');
 
       setOverdueLoans(response.data);
     } catch (error) {

@@ -9,7 +9,7 @@ function CustomersPage() {
 
   const fetchCustomers = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/customers');
+      const response = await axios.get('https://pledge-loan-api-as.onrender.com/api/customers');
       setCustomers(response.data);
     } catch (error) {
       console.error("Error fetching customers:", error);

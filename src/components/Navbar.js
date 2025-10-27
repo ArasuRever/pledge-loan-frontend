@@ -11,7 +11,7 @@ function Navbar({ onLogout }) {
     if (!searchTerm.trim()) return;
 
     try {
-      const response = await axios.get(`http://localhost:3001/api/loans/find-by-book-number/${searchTerm}`);
+      const response = await axios.get(`https://pledge-loan-api-as.onrender.com/api/loans/find-by-book-number/${searchTerm}`);
       navigate(`/loans/${response.data.loanId}`);
       setSearchTerm('');
     } catch (error) {

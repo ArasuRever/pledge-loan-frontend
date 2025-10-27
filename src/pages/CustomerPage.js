@@ -18,8 +18,8 @@ function CustomerPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const customerPromise = axios.get(`http://localhost:3001/api/customers/${id}`);
-        const loansPromise = axios.get(`http://localhost:3001/api/customers/${id}/loans`);
+        const customerPromise = axios.get(`https://pledge-loan-api-as.onrender.com/api/customers/${id}`);
+        const loansPromise = axios.get(`https://pledge-loan-api-as.onrender.com/api/customers/${id}/loans`);
         const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
         setCustomer(customerResponse.data);
         setLoans(loansResponse.data);

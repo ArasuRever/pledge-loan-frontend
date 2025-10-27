@@ -78,7 +78,7 @@ function LoanForm({ customerId, onLoanAdded }) {
       if (itemPhoto) { const fileName = itemPhoto instanceof File ? itemPhoto.name : 'capture.jpg'; formData.append('itemPhoto', itemPhoto, fileName); }
 
       try {
-        await axios.post('http://localhost:3001/api/loans', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await axios.post('https://pledge-loan-api-as.onrender.com/api/loans', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('New loan added!');
         setPrincipal(''); setInterestRate('2.5'); setBookLoanNumber(''); setItemType('gold'); // Reset rate to default
         setDescription(''); setQuality(''); setWeight(''); clearPhoto();

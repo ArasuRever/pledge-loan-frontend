@@ -167,7 +167,7 @@ function LoanPage() {
     const handleSettleAndClose = async () => {
         const discountValue = parseFloat(discount) || 0;
         if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}. Proceed?`)) {
-            try { const response = await axios.post(`http://localhost:3001/api/loans/${id}/settle`, { discountAmount: discountValue }); alert(response.data.message); setRefreshTrigger(t => t + 1); }
+            try { const response = await axios.post(`https://pledge-loan-api-as.onrender.com/api/loans/${id}/settle`, { discountAmount: discountValue }); alert(response.data.message); setRefreshTrigger(t => t + 1); }
             catch (err) { if (err.response?.data?.error) { alert(err.response.data.error); } else { console.error("Settle Error:", err); alert('Settle failed.'); } }
         }
     };
@@ -175,7 +175,7 @@ function LoanPage() {
         const amountValue = parseFloat(additionalAmount);
         if (!amountValue || amountValue <= 0) { alert('Please enter a valid positive amount.'); return; }
         if (window.confirm(`Add ₹${amountValue.toFixed(2)} to the principal?`)) {
-            try { const response = await axios.post(`http://localhost:3001/api/loans/${id}/add-principal`, { additionalAmount: amountValue }); alert(response.data.message); setAdditionalAmount(''); setRefreshTrigger(t => t + 1); }
+            try { const response = await axios.post(`https://pledge-loan-api-as.onrender.com/api/loans/${id}/add-principal`, { additionalAmount: amountValue }); alert(response.data.message); setAdditionalAmount(''); setRefreshTrigger(t => t + 1); }
             catch (err) { if (err.response?.data?.error) { alert(`Error: ${err.response.data.error}`); } else { console.error("Add Principal Error:", err); alert('Add principal failed.'); } }
         }
     };
@@ -188,7 +188,7 @@ function LoanPage() {
             setCalculatedInterest(0); setCalculatedMonths(0); setCalculatedTotalOwed(0); setCalculatedRate(0);
             setDisbursementDetails([]); // Reset breakdown
             try {
-                const response = await axios.get(`http://localhost:3001/api/loans/${id}`);
+                const response = await axios.get(`https://pledge-loan-api-as.onrender.com/api/loans/${id}`);
                 setLoanData(response.data);
                 if (response.data?.loanDetails) {
                     const { totalInterest, totalMonthsFactor, rateUsed, totalOwed, disbursementEvents } = calculateInterestDetails(response.data.loanDetails, response.data.transactions);
