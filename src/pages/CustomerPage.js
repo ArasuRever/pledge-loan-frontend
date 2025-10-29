@@ -4,27 +4,32 @@ import axios from 'axios';
 import LoanForm from '../components/LoanForm';
 import EditCustomerForm from '../components/EditCustomerForm';
 
+// *** USE YOUR RENDER BACKEND URL HERE ***
+const API_BASE_URL = 'https://pledge-loan-api-as.onrender.com';
+
 function CustomerPage() {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
   const [loans, setLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0); // State to trigger refresh
+  const [isEditing, setIsEditing] = useState(false); // Should start as false
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log("CustomerPage: useEffect fetching data..."); // Log data fetch start
       setIsLoading(true);
       setError(null);
       try {
-        const customerPromise = axios.get(`https://pledge-loan-api-as.onrender.com/api/customers/${id}`);
-        const loansPromise = axios.get(`https://pledge-loan-api-as.onrender.com/api/customers/${id}/loans`);
+        const customerPromise = axios.get(`${API_BASE_URL}/api/customers/${id}`);
+        const loansPromise = axios.get(`${API_BASE_URL}/api/customers/${id}/loans`);
         const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
         setCustomer(customerResponse.data);
         setLoans(loansResponse.data);
+        console.log("CustomerPage: Data fetch successful."); // Log data fetch success
       } catch (err) {
-        console.error("Error fetching customer data:", err);
+        console.error("CustomerPage: Error fetching customer data:", err);
         setError("Customer not found or an error occurred.");
       } finally {
         setIsLoading(false);
@@ -32,41 +37,61 @@ function CustomerPage() {
     };
 
     fetchData();
-  }, [id, refreshTrigger]); // Add refreshTrigger as dependency
+  }, [id, refreshTrigger]); // Dependencies look correct
+
+  const handleEditClick = () => {
+    console.log(">>> Edit button clicked!"); // Log when edit button is clicked
+    setIsEditing(true);
+  };
+
+  const handleUpdate = () => {
+    console.log(">>> onUpdate called in CustomerPage!"); // Log when EditCustomerForm signals an update
+    setIsEditing(false);
+    setRefreshTrigger(t => t + 1); // Trigger a refresh
+  };
+
+  const handleCancel = () => {
+    console.log(">>> Cancel button clicked!"); // Log when cancel is clicked
+    setIsEditing(false);
+  };
+
+  // Log rendering status
+  console.log(`CustomerPage rendering, isLoading: ${isLoading}, isEditing: ${isEditing}`);
 
   if (isLoading) return <div>Loading customer details...</div>;
   if (error) return <div><p>{error}</p><Link to="/customers">Go back to Customers</Link></div>;
-  if (!customer) return null;
+  if (!customer) return null; // Should prevent rendering EditCustomerForm if customer is null initially
 
+  // Conditional rendering based on isEditing state
   if (isEditing) {
+      console.log("CustomerPage rendering EditCustomerForm..."); // Log when rendering the edit form
       return (
-          <EditCustomerForm 
-              customer={customer} 
-              onUpdate={() => { 
-                  setIsEditing(false);
-                  setRefreshTrigger(t => t + 1); // Trigger a refresh
-              }}
-              onCancel={() => setIsEditing(false)}
+          <EditCustomerForm
+              customer={customer}
+              onUpdate={handleUpdate} // Pass the handleUpdate function reference
+              onCancel={handleCancel}  // Pass the handleCancel function reference
           />
       );
   }
-  
+
+  // --- Display Customer Details (when not editing) ---
   const activeLoans = loans.filter(loan => loan.status === 'active' || loan.status === 'overdue');
   const closedLoans = loans.filter(loan => loan.status === 'paid' || loan.status === 'forfeited');
 
   return (
     <div>
       <div className="d-flex justify-content-end mb-3">
-        <button className="btn btn-outline-warning" onClick={() => setIsEditing(true)}>
+        {/* Make sure onClick calls the specific handler */}
+        <button className="btn btn-outline-warning" onClick={handleEditClick}>
           Edit Profile & Photo
         </button>
       </div>
 
       {customer.customer_image_url && (
-        <img 
-          src={customer.customer_image_url} 
-          alt={customer.name} // Fix for redundant-alt warning
-          style={{ maxWidth: '150px', maxHeight: '150px', marginBottom: '15px', display: 'block', borderRadius: '5px' }} 
+        <img
+          src={customer.customer_image_url}
+          alt={customer.name}
+          style={{ maxWidth: '150px', maxHeight: '150px', marginBottom: '15px', display: 'block', borderRadius: '5px' }}
         />
       )}
 
@@ -74,11 +99,11 @@ function CustomerPage() {
       <p><strong>Phone:</strong> {customer.phone_number}</p>
       <p><strong>Address:</strong> {customer.address}</p>
 
-      {/* Pass the refresh function to the form */}
+      {/* Pass the refresh function correctly */}
       <LoanForm customerId={id} onLoanAdded={() => setRefreshTrigger(t => t + 1)} />
 
       <hr />
-      
+
        <div className="mt-4">
         <h3>Active Loans</h3>
         {activeLoans.length > 0 ? (
@@ -110,7 +135,7 @@ function CustomerPage() {
           <p>No closed loans.</p>
         )}
       </div>
-      
+
       <Link to="/customers" className="btn btn-secondary mt-4">Back to Customers</Link>
     </div>
   );
