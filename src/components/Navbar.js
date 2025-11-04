@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 // --- ⭐ CHANGED: Accept `user` prop ---
 function Navbar({ user, onLogout }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -12,7 +14,8 @@ function Navbar({ user, onLogout }) {
     if (!searchTerm.trim()) return;
 
     try {
-      const response = await axios.get(`/api/loans/find-by-book-number/${searchTerm}`);
+      // 2. USE THE VARIABLE HERE
+      const response = await axios.get(`${API_URL}/api/loans/find-by-book-number/${searchTerm}`);
       navigate(`/loans/${response.data.loanId}`);
       setSearchTerm('');
     } catch (error) {

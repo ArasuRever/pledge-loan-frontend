@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 function AllLoansPage() {
   const [loans, setLoans] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,7 +21,8 @@ function AllLoansPage() {
             // Check if Axios default header is set (for debugging)
             console.log("AllLoansPage: Axios Auth Header before fetch:", axios.defaults.headers.common['Authorization']);
 
-            const response = await axios.get('/api/loans');
+            // 2. USE THE VARIABLE HERE
+            const response = await axios.get(`${API_URL}/api/loans`);
             console.log("AllLoansPage: Fetch successful", response.data); // Log success
             setLoans(response.data);
         } catch (error) {

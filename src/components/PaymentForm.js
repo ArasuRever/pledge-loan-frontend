@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 function PaymentForm({ loanId, onPaymentAdded }) {
   const [amount, setAmount] = useState('');
   const [paymentType, setPaymentType] = useState('interest');
@@ -9,7 +11,8 @@ function PaymentForm({ loanId, onPaymentAdded }) {
     e.preventDefault();
     if (!amount || amount <= 0) return alert('Please enter a valid amount.');
     try {
-      await axios.post('/api/transactions', { loan_id: loanId, amount_paid: amount, payment_type: paymentType });
+      // 2. USE THE VARIABLE HERE
+      await axios.post(`${API_URL}/api/transactions`, { loan_id: loanId, amount_paid: amount, payment_type: paymentType });
       alert('Payment added!');
       setAmount('');
       onPaymentAdded();

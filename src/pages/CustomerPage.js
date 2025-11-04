@@ -4,6 +4,8 @@ import axios from 'axios';
 import LoanForm from '../components/LoanForm';
 import EditCustomerForm from '../components/EditCustomerForm';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 function CustomerPage() {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
@@ -19,8 +21,10 @@ function CustomerPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const customerPromise = axios.get(`/api/customers/${id}`);
-        const loansPromise = axios.get(`/api/customers/${id}/loans`);
+        // 2. USE THE VARIABLE HERE
+        const customerPromise = axios.get(`${API_URL}/api/customers/${id}`);
+        // 3. AND HERE
+        const loansPromise = axios.get(`${API_URL}/api/customers/${id}/loans`);
         const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
         setCustomer(customerResponse.data);
         setLoans(loansResponse.data);

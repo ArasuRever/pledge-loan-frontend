@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 // This form will receive the current customer data and an update handler
 function EditCustomerForm({ customer, onUpdate, onCancel }) {
     // Initialize state with existing customer data
@@ -45,7 +47,8 @@ function EditCustomerForm({ customer, onUpdate, onCancel }) {
 
         try {
             // Use PUT request for updating
-            await axios.put(`/api/customers/${customer.id}`, formData, {
+            // 2. USE THE VARIABLE HERE
+            await axios.put(`${API_URL}/api/customers/${customer.id}`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             alert('Customer updated successfully!');

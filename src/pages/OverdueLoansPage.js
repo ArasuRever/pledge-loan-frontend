@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 // Use named export
 export const OverdueLoansPage = () => {
   const [overdueLoans, setOverdueLoans] = useState([]);
@@ -12,7 +14,8 @@ export const OverdueLoansPage = () => {
     try {
       // *** FINAL FIX: ADD CACHE BUSTER PARAMETER ***
       const cacheBuster = Date.now();
-      const url = `/api/loans/overdue?t=${cacheBuster}`;
+      // 2. USE THE VARIABLE HERE
+      const url = `${API_URL}/api/loans/overdue?t=${cacheBuster}`;
 
       const response = await axios.get(url);
 

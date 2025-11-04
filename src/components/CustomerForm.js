@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 function CustomerForm({ onCustomerAdded }) {
     const [name, setName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
@@ -23,7 +25,8 @@ function CustomerForm({ onCustomerAdded }) {
         }
 
         try {
-            await axios.post('/api/customers', formData, {
+            // 2. USE THE VARIABLE HERE
+            await axios.post(`${API_URL}/api/customers`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' } // Important header
             });
             alert('Customer added!');

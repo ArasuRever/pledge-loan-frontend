@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 function Dashboard() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,7 +22,8 @@ function Dashboard() {
           return;
         }
 
-        const response = await axios.get('/api/dashboard/stats', {
+        // 2. USE THE VARIABLE HERE
+        const response = await axios.get(`${API_URL}/api/dashboard/stats`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         setStats(response.data);

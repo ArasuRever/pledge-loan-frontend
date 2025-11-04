@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 // We'll pass a function 'onLoginSuccess' from App.js to save the token
 function LoginPage({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
@@ -13,7 +15,8 @@ function LoginPage({ onLoginSuccess }) {
 
     try {
       // Make API call to the login endpoint
-      const response = await axios.post('/api/auth/login', {
+      // 2. USE THE VARIABLE HERE
+      const response = await axios.post(`${API_URL}/api/auth/login`, {
         username: username,
         password: password
       });

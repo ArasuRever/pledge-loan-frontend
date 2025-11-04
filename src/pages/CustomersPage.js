@@ -3,6 +3,8 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import CustomerForm from '../components/CustomerForm';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 // --- ⭐ CHANGED: Added userRole prop ---
 function CustomersPage({ userRole }) {
   const [customers, setCustomers] = useState([]);
@@ -10,7 +12,8 @@ function CustomersPage({ userRole }) {
 
   const fetchCustomers = async () => {
     try {
-      const response = await axios.get('/api/customers');
+      // 2. USE THE VARIABLE HERE
+      const response = await axios.get(`${API_URL}/api/customers`);
       setCustomers(response.data);
     } catch (error) {
       console.error("Error fetching customers:", error);

@@ -8,12 +8,15 @@ import html2canvas from 'html2canvas';
 import PaymentForm from '../components/PaymentForm';
 import { PrintableInvoice } from '../components/PrintableInvoice';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 // --- Simple Modal Styles ---
 const modalOverlayStyle = {
   position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
   backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
   justifyContent: 'center', alignItems: 'center', zIndex: 1050,
 };
+// ... (rest of modal styles are unchanged) ...
 const modalContentStyle = {
   backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '80%',
   maxWidth: '800px', maxHeight: '85vh', overflowY: 'auto',
@@ -167,7 +170,11 @@ function LoanPage() {
     const handleSettleAndClose = async () => {
         const discountValue = parseFloat(discount) || 0;
         if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}. Proceed?`)) {
-            try { const response = await axios.post(`/api/loans/${id}/settle`, { discountAmount: discountValue }); alert(response.data.message); setRefreshTrigger(t => t + 1); }
+            try { 
+                // 2. USE THE VARIABLE HERE
+                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue }); 
+                alert(response.data.message); setRefreshTrigger(t => t + 1); 
+            }
             catch (err) { if (err.response?.data?.error) { alert(err.response.data.error); } else { console.error("Settle Error:", err); alert('Settle failed.'); } }
         }
     };
@@ -175,7 +182,11 @@ function LoanPage() {
         const amountValue = parseFloat(additionalAmount);
         if (!amountValue || amountValue <= 0) { alert('Please enter a valid positive amount.'); return; }
         if (window.confirm(`Add ₹${amountValue.toFixed(2)} to the principal?`)) {
-            try { const response = await axios.post(`/api/loans/${id}/add-principal`, { additionalAmount: amountValue }); alert(response.data.message); setAdditionalAmount(''); setRefreshTrigger(t => t + 1); }
+            try { 
+                // 3. USE THE VARIABLE HERE
+                const response = await axios.post(`${API_URL}/api/loans/${id}/add-principal`, { additionalAmount: amountValue }); 
+                alert(response.data.message); setAdditionalAmount(''); setRefreshTrigger(t => t + 1); 
+            }
             catch (err) { if (err.response?.data?.error) { alert(`Error: ${err.response.data.error}`); } else { console.error("Add Principal Error:", err); alert('Add principal failed.'); } }
         }
     };
@@ -188,7 +199,8 @@ function LoanPage() {
             setCalculatedInterest(0); setCalculatedMonths(0); setCalculatedTotalOwed(0); setCalculatedRate(0);
             setDisbursementDetails([]); // Reset breakdown
             try {
-                const response = await axios.get(`/api/loans/${id}`);
+                // 4. USE THE VARIABLE HERE
+                const response = await axios.get(`${API_URL}/api/loans/${id}`);
                 setLoanData(response.data);
                 if (response.data?.loanDetails) {
                     const { totalInterest, totalMonthsFactor, rateUsed, totalOwed, disbursementEvents } = calculateInterestDetails(response.data.loanDetails, response.data.transactions);

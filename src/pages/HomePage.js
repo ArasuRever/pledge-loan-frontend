@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios'; 
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 function HomePage({ userRole }) {
   const [stats, setStats] = useState(null);
   const [recentLoans, setRecentLoans] = useState([]);
@@ -25,12 +27,15 @@ function HomePage({ userRole }) {
 
         // --- ⭐ THIS IS THE FIX ---
         // We *always* fetch the basic lists.
-        const recentPromise = axios.get('/api/loans/recent/created', { headers });
-        const closedPromise = axios.get('/api/loans/recent/closed', { headers });
+        // 2. USE THE VARIABLE HERE
+        const recentPromise = axios.get(`${API_URL}/api/loans/recent/created`, { headers });
+        // 3. AND HERE
+        const closedPromise = axios.get(`${API_URL}/api/loans/recent/closed`, { headers });
         
         if (userRole === 'admin') {
           // If user is admin, ALSO fetch the financial stats
-          const statsPromise = axios.get('/api/dashboard/stats', { headers });
+          // 4. AND HERE
+          const statsPromise = axios.get(`${API_URL}/api/dashboard/stats`, { headers });
           
           const [statsRes, recentRes, closedRes] = await Promise.all([
             statsPromise, 

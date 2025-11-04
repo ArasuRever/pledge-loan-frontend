@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 function EditLoanPage() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -45,7 +47,8 @@ function EditLoanPage() {
         const fetchLoanData = async () => {
             setIsLoading(true); setError(null);
             try {
-                const response = await axios.get(`/api/loans/${id}`);
+                // 2. USE THE VARIABLE HERE
+                const response = await axios.get(`${API_URL}/api/loans/${id}`);
                 const data = response.data.loanDetails;
                 setLoanDetails(data);
                 setBookLoanNumber(data.book_loan_number || '');
@@ -106,7 +109,8 @@ function EditLoanPage() {
         else if (removeItemImage) { formData.append('removeItemImage', 'true'); }
 
         try {
-            const response = await axios.put(`/api/loans/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            // 3. USE THE VARIABLE HERE
+            const response = await axios.put(`${API_URL}/api/loans/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             alert(response.data.message || 'Loan updated successfully!');
             navigate(`/loans/${id}`);
         } catch (err) {

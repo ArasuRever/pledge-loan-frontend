@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import LoanForm from '../components/LoanForm';
 
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
 // --- ⭐ CHANGED: Added userRole prop ---
 function NewLoanWorkflowPage({ userRole }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,7 +26,8 @@ function NewLoanWorkflowPage({ userRole }) {
         setSelectedCustomer(null);
 
         try {
-          const response = await axios.get('/api/customers');
+          // 2. USE THE VARIABLE HERE
+          const response = await axios.get(`${API_URL}/api/customers`);
           
           const results = response.data.filter(c => 
             c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
