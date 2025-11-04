@@ -19,7 +19,7 @@ function AllLoansPage() {
             // Check if Axios default header is set (for debugging)
             console.log("AllLoansPage: Axios Auth Header before fetch:", axios.defaults.headers.common['Authorization']);
 
-            const response = await axios.get('https://pledge-loan-api-as.onrender.com/api/loans');
+            const response = await axios.get('/api/loans');
             console.log("AllLoansPage: Fetch successful", response.data); // Log success
             setLoans(response.data);
         } catch (error) {

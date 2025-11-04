@@ -22,6 +22,9 @@ function LoanForm({ customerId, onLoanAdded }) {
   const [description, setDescription] = useState('');
   const [quality, setQuality] = useState('');
   const [weight, setWeight] = useState('');
+  
+  // --- ⭐ 1. NEW STATE ADDED HERE (and moved from handleSubmit) ---
+  const [deductFirstMonthInterest, setDeductFirstMonthInterest] = useState(false);
 
   // Photo handling state
   const [photoSource, setPhotoSource] = useState('upload');
@@ -59,9 +62,9 @@ function LoanForm({ customerId, onLoanAdded }) {
        }
    };
    const clearPhoto = () => {
-      setItemPhoto(null); setPhotoPreview(null); stopCameraStream();
-      const fileInput = document.getElementById('itemPhotoInput'); if (fileInput) fileInput.value = null;
-    };
+     setItemPhoto(null); setPhotoPreview(null); stopCameraStream();
+     const fileInput = document.getElementById('itemPhotoInput'); if (fileInput) fileInput.value = null;
+   };
 
   // Handle Submit
   const handleSubmit = async (e) => {
@@ -76,12 +79,19 @@ function LoanForm({ customerId, onLoanAdded }) {
       formData.append('quality', quality);
       formData.append('weight', weight);
       if (itemPhoto) { const fileName = itemPhoto instanceof File ? itemPhoto.name : 'capture.jpg'; formData.append('itemPhoto', itemPhoto, fileName); }
+      
+      // --- ⭐ 2. NEW CHECKBOX VALUE ADDED TO FORMDATA ---
+      formData.append('deductFirstMonthInterest', deductFirstMonthInterest);
 
       try {
-        await axios.post('https://pledge-loan-api-as.onrender.com/api/loans', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await axios.post('/api/loans', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('New loan added!');
         setPrincipal(''); setInterestRate('2.5'); setBookLoanNumber(''); setItemType('gold'); // Reset rate to default
         setDescription(''); setQuality(''); setWeight(''); clearPhoto();
+        
+        // --- ⭐ 3. RESET NEW CHECKBOX STATE ---
+        setDeductFirstMonthInterest(false);
+        
         onLoanAdded();
       } catch (error) {
         if (error.response) alert(error.response.data); else alert('Failed to add new loan.');
@@ -124,6 +134,23 @@ function LoanForm({ customerId, onLoanAdded }) {
                </select>
              </div>
              {/* --- END Interest Rate Dropdown --- */}
+             
+             {/* --- ⭐ 4. NEW CHECKBOX JSX --- */}
+             <div className="col-md-6 mb-3 d-flex align-items-end">
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="deductFirstMonthInterest"
+                    checked={deductFirstMonthInterest}
+                    onChange={(e) => setDeductFirstMonthInterest(e.target.checked)}
+                  />
+                  <label className="form-check-label" htmlFor="deductFirstMonthInterest">
+                    Deduct first month's interest
+                  </label>
+                </div>
+             </div>
+             {/* --- END NEW CHECKBOX --- */}
 
             {/* Item Type, Description, Quality, Weight */}
             <div className="col-md-6 mb-3">

@@ -23,7 +23,7 @@ function CustomerForm({ onCustomerAdded }) {
         }
 
         try {
-            await axios.post('https://pledge-loan-api-as.onrender.com/api/customers', formData, {
+            await axios.post('/api/customers', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' } // Important header
             });
             alert('Customer added!');

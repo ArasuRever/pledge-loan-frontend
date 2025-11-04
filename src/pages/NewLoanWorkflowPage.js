@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-// Removed 'Link' from this import
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import LoanForm from '../components/LoanForm';
 
-function NewLoanWorkflowPage() {
+// --- ⭐ CHANGED: Added userRole prop ---
+function NewLoanWorkflowPage({ userRole }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [customerResults, setCustomerResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -24,7 +24,7 @@ function NewLoanWorkflowPage() {
         setSelectedCustomer(null);
 
         try {
-          const response = await axios.get('https://pledge-loan-api-as.onrender.com/api/customers');
+          const response = await axios.get('/api/customers');
           
           const results = response.data.filter(c => 
             c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -63,8 +63,6 @@ function NewLoanWorkflowPage() {
       setMessage('Loan added successfully. Start a new search.');
   }
   
-  // Removed the unused handleFormSubmit function
-
   return (
     <div className="row">
       <div className="col-lg-8 offset-lg-2">
@@ -83,7 +81,8 @@ function NewLoanWorkflowPage() {
 
         <div className="alert alert-info">
             {message}
-            {message.includes('not found') && (
+            {/* --- ⭐ CHANGED: Only show Create Customer button to admins --- */}
+            {message.includes('not found') && userRole === 'admin' && (
                 <button onClick={handleCreateCustomer} className="btn btn-success btn-sm ms-3">
                     + Create New Customer
                 </button>

@@ -4,32 +4,28 @@ import axios from 'axios';
 import LoanForm from '../components/LoanForm';
 import EditCustomerForm from '../components/EditCustomerForm';
 
-// *** USE YOUR RENDER BACKEND URL HERE ***
-const API_BASE_URL = 'https://pledge-loan-api-as.onrender.com';
-
 function CustomerPage() {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
   const [loans, setLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isEditing, setIsEditing] = useState(false); // Should start as false
+  const [isEditing, setIsEditing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showLoanForm, setShowLoanForm] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
-      console.log("CustomerPage: useEffect fetching data..."); // Log data fetch start
       setIsLoading(true);
       setError(null);
       try {
-        const customerPromise = axios.get(`${API_BASE_URL}/api/customers/${id}`);
-        const loansPromise = axios.get(`${API_BASE_URL}/api/customers/${id}/loans`);
+        const customerPromise = axios.get(`/api/customers/${id}`);
+        const loansPromise = axios.get(`/api/customers/${id}/loans`);
         const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
         setCustomer(customerResponse.data);
         setLoans(loansResponse.data);
-        console.log("CustomerPage: Data fetch successful."); // Log data fetch success
       } catch (err) {
-        console.error("CustomerPage: Error fetching customer data:", err);
+        console.error("Error fetching customer data:", err);
         setError("Customer not found or an error occurred.");
       } finally {
         setIsLoading(false);
@@ -37,106 +33,162 @@ function CustomerPage() {
     };
 
     fetchData();
-  }, [id, refreshTrigger]); // Dependencies look correct
+  }, [id, refreshTrigger]);
 
-  const handleEditClick = () => {
-    console.log(">>> Edit button clicked!"); // Log when edit button is clicked
-    setIsEditing(true);
+  // Helper to get status badge
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'overdue':
+        return <span className="badge bg-danger rounded-pill">Overdue</span>;
+      case 'active':
+        return <span className="badge bg-primary rounded-pill">Active</span>;
+      case 'paid':
+        return <span className="badge bg-success rounded-pill">Paid</span>;
+      case 'forfeited':
+        return <span className="badge bg-secondary rounded-pill">Forfeited</span>;
+      default:
+        return null;
+    }
   };
 
-  const handleUpdate = () => {
-    console.log(">>> onUpdate called in CustomerPage!"); // Log when EditCustomerForm signals an update
-    setIsEditing(false);
-    setRefreshTrigger(t => t + 1); // Trigger a refresh
-  };
+  if (isLoading) return <div className="text-center p-5"><div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div></div>;
+  if (error) return <div className="alert alert-danger"><p>{error}</p><Link to="/customers">Go back to Customers</Link></div>;
+  if (!customer) return null;
 
-  const handleCancel = () => {
-    console.log(">>> Cancel button clicked!"); // Log when cancel is clicked
-    setIsEditing(false);
-  };
-
-  // Log rendering status
-  console.log(`CustomerPage rendering, isLoading: ${isLoading}, isEditing: ${isEditing}`);
-
-  if (isLoading) return <div>Loading customer details...</div>;
-  if (error) return <div><p>{error}</p><Link to="/customers">Go back to Customers</Link></div>;
-  if (!customer) return null; // Should prevent rendering EditCustomerForm if customer is null initially
-
-  // Conditional rendering based on isEditing state
   if (isEditing) {
-      console.log("CustomerPage rendering EditCustomerForm..."); // Log when rendering the edit form
       return (
-          <EditCustomerForm
-              customer={customer}
-              onUpdate={handleUpdate} // Pass the handleUpdate function reference
-              onCancel={handleCancel}  // Pass the handleCancel function reference
+          <EditCustomerForm 
+              customer={customer} 
+              onUpdate={() => { 
+                  setIsEditing(false);
+                  setRefreshTrigger(t => t + 1);
+              }}
+              onCancel={() => setIsEditing(false)}
           />
       );
   }
-
-  // --- Display Customer Details (when not editing) ---
+  
   const activeLoans = loans.filter(loan => loan.status === 'active' || loan.status === 'overdue');
   const closedLoans = loans.filter(loan => loan.status === 'paid' || loan.status === 'forfeited');
 
   return (
     <div>
-      <div className="d-flex justify-content-end mb-3">
-        {/* Make sure onClick calls the specific handler */}
-        <button className="btn btn-outline-warning" onClick={handleEditClick}>
-          Edit Profile & Photo
-        </button>
-      </div>
-
-      {customer.customer_image_url && (
-        <img
-          src={customer.customer_image_url}
-          alt={customer.name}
-          style={{ maxWidth: '150px', maxHeight: '150px', marginBottom: '15px', display: 'block', borderRadius: '5px' }}
-        />
-      )}
-
-      <h2>{customer.name}</h2>
-      <p><strong>Phone:</strong> {customer.phone_number}</p>
-      <p><strong>Address:</strong> {customer.address}</p>
-
-      {/* Pass the refresh function correctly */}
-      <LoanForm customerId={id} onLoanAdded={() => setRefreshTrigger(t => t + 1)} />
-
-      <hr />
-
-       <div className="mt-4">
-        <h3>Active Loans</h3>
-        {activeLoans.length > 0 ? (
-          <div className="list-group">
-            {activeLoans.map(loan => (
-              <Link key={loan.loan_id} to={`/loans/${loan.loan_id}`} className="list-group-item list-group-item-action">
-                Loan #{loan.loan_id} - ₹{loan.principal_amount} {loan.description ? `for ${loan.description}` : ''}
-                 <small className="d-block text-muted">Pledged: {new Date(loan.pledge_date).toLocaleDateString()} | Due: {new Date(loan.due_date).toLocaleDateString()}</small>
-              </Link>
-            ))}
+      {/* --- 1. CUSTOMER PROFILE HEADER (Full Width) --- */}
+      <div className="card shadow-sm mb-4">
+        <div className="card-body">
+          <div className="row">
+            <div className="col-md-2 col-sm-3 text-center">
+              <img 
+                src={customer.customer_image_url || 'https://via.placeholder.com/150'} 
+                alt={customer.name}
+                className="img-fluid rounded-circle"
+                style={{ width: '120px', height: '120px', objectFit: 'cover' }} 
+              />
+            </div>
+            <div className="col-md-7 col-sm-9">
+              <h2 className="mb-1">{customer.name}</h2>
+              <p className="text-muted mb-1">
+                <i className="bi bi-phone me-2"></i>{customer.phone_number}
+              </p>
+              <p className="text-muted">
+                <i className="bi bi-geo-alt me-2"></i>{customer.address}
+              </p>
+            </div>
+            <div className="col-md-3 text-md-end mt-2 mt-md-0">
+              <button className="btn btn-outline-secondary btn-sm" onClick={() => setIsEditing(true)}>
+                <i className="bi bi-pencil me-1"></i> Edit Profile
+              </button>
+            </div>
           </div>
-        ) : (
-          <p>No active loans.</p>
-        )}
+        </div>
       </div>
 
-      <div className="mt-4">
-        <h3>Closed Loans</h3>
-        {closedLoans.length > 0 ? (
-          <div className="list-group">
-            {closedLoans.map(loan => (
-              <Link key={loan.loan_id} to={`/loans/${loan.loan_id}`} className="list-group-item list-group-item-action text-muted">
-                Loan #{loan.loan_id} - ₹{loan.principal_amount} - Status: {loan.status}
-                 <small className="d-block text-muted">Pledged: {new Date(loan.pledge_date).toLocaleDateString()}</small>
-              </Link>
-            ))}
+      {/* --- 2. NEW TWO-COLUMN LAYOUT --- */}
+      <div className="row">
+        
+        {/* --- 2A. LEFT COLUMN (Pledge Form) --- */}
+        <div className="col-md-5 col-lg-4">
+          <div className="d-grid mb-3">
+            <button className={`btn ${showLoanForm ? 'btn-danger' : 'btn-primary'}`} onClick={() => setShowLoanForm(!showLoanForm)}>
+              {showLoanForm ? <i className="bi bi-x-lg me-1"></i> : <i className="bi bi-plus-lg me-1"></i>}
+              {showLoanForm ? 'Cancel New Pledge' : 'Create New Pledge'}
+            </button>
           </div>
-        ) : (
-          <p>No closed loans.</p>
-        )}
-      </div>
+          
+          {showLoanForm && (
+            <LoanForm 
+              customerId={id} 
+              onLoanAdded={() => {
+                setRefreshTrigger(t => t + 1);
+                setShowLoanForm(false); // Hide form on success
+              }} 
+            />
+          )}
+        </div>
 
-      <Link to="/customers" className="btn btn-secondary mt-4">Back to Customers</Link>
+        {/* --- 2B. RIGHT COLUMN (Loan Lists) --- */}
+        <div className="col-md-7 col-lg-8">
+          
+          {/* --- Active Loans Card --- */}
+          <div className="card shadow-sm mb-4">
+            <div className="card-header">
+              <h5 className="mb-0">Active Loans</h5>
+            </div>
+            <div className="card-body">
+              {activeLoans.length > 0 ? (
+                <div className="list-group list-group-flush">
+                  {activeLoans.map(loan => (
+                    <Link key={loan.loan_id} to={`/loans/${loan.loan_id}`} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0">
+                      <div>
+                        <strong>Book #: {loan.book_loan_number} (Loan #{loan.loan_id})</strong>
+                          <span className="ms-2">- ₹{parseFloat(loan.principal_amount).toLocaleString('en-IN')}</span>
+                          <span className="text-muted ms-2">{loan.description ? `(${loan.description})` : ''}</span>
+                        <small className="d-block text-muted">
+                          Pledged: {new Date(loan.pledge_date).toLocaleDateString()} | Due: {new Date(loan.due_date).toLocaleDateString()}
+                        </small>
+                      </div>
+                      {getStatusBadge(loan.status)}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p>No active loans.</p>
+              )}
+            </div>
+          </div>
+
+          {/* --- Closed Loans Card --- */}
+          <div className="card shadow-sm mb-4">
+            <div className="card-header">
+              <h5 className="mb-0">Closed Loans</h5>
+            </div>
+            <div className="card-body">
+              {closedLoans.length > 0 ? (
+                <div className="list-group list-group-flush">
+                  {closedLoans.map(loan => (
+                    <Link key={loan.loan_id} to={`/loans/${loan.loan_id}`} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 list-group-item-light text-muted">
+                      <div>
+                        <strong>Book #: {loan.book_loan_number} (Loan #{loan.loan_id})</strong>
+<span className="ms-2">- ₹{parseFloat(loan.principal_amount).toLocaleString('en-IN')}</span>
+                        <small className="d-block text-muted">Pledged: {new Date(loan.pledge_date).toLocaleDateString()}</small>
+                      </div>
+                      {getStatusBadge(loan.status)}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p>No closed loans.</p>
+              )}
+            </div>
+          </div>
+
+        </div>
+      </div>
+      
+      <Link to="/customers" className="btn btn-secondary mt-3">
+        <i className="bi bi-arrow-left me-1"></i>
+        Back to Customers
+      </Link>
     </div>
   );
 }

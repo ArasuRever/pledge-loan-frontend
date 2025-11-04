@@ -14,7 +14,7 @@ export const OverdueLoansPage = () => {
       const cacheBuster = Date.now();
       const url = `/api/loans/overdue?t=${cacheBuster}`;
 
-      const response = await axios.get(`https://pledge-loan-api-as.onrender.com${url}`);
+      const response = await axios.get(url);
 
       setOverdueLoans(response.data);
     } catch (error) {

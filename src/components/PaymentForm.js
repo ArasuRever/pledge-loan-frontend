@@ -9,7 +9,7 @@ function PaymentForm({ loanId, onPaymentAdded }) {
     e.preventDefault();
     if (!amount || amount <= 0) return alert('Please enter a valid amount.');
     try {
-      await axios.post('https://pledge-loan-api-as.onrender.com/api/transactions', { loan_id: loanId, amount_paid: amount, payment_type: paymentType });
+      await axios.post('/api/transactions', { loan_id: loanId, amount_paid: amount, payment_type: paymentType });
       alert('Payment added!');
       setAmount('');
       onPaymentAdded();

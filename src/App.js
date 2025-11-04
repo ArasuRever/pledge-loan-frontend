@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
+import { jwtDecode } from 'jwt-decode'; // <-- 1. IMPORT ADDED
 
 // --- Pages ---
 import HomePage from './pages/HomePage';
@@ -16,8 +17,6 @@ import EditLoanPage from './pages/EditLoanPage';
 // --- Components ---
 import Navbar from './components/Navbar';
 
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-
 // Helper function to set the authorization token for Axios requests
 const setAuthToken = (token) => {
   if (token) {
@@ -30,84 +29,94 @@ const setAuthToken = (token) => {
 };
 
 function App() {
-  // State for the authentication token
   const [token, setToken] = useState(localStorage.getItem('token'));
-  // State to track if the initial token check is complete
-  const [isInitializing, setIsInitializing] = useState(true); // Start as true
+  
+  // --- ⭐ 2. CHANGED: We now store the whole user object ---
+  const [user, setUser] = useState(null); 
+  
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  // Effect runs once on component mount to check for stored token
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
-    console.log("App mounted, checking token:", storedToken); // Debug log
+    console.log("App mounted, checking token:", storedToken);
     if (storedToken) {
       setToken(storedToken);
-      setAuthToken(storedToken); // Set token for future API requests
+      setAuthToken(storedToken);
+      try {
+        // --- ⭐ 3. CHANGED: Decode token and store user ---
+        const decodedUser = jwtDecode(storedToken); // { userId, username, role }
+        setUser({ username: decodedUser.username, role: decodedUser.role });
+      } catch (error) {
+        console.error("Invalid token:", error);
+        handleLogout(); // Clear bad token
+      }
     } else {
-       setAuthToken(null); // Explicitly clear if no token found
+       setAuthToken(null);
     }
-    // Mark initialization as complete
     setIsInitializing(false);
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
-  // Handler for successful login
   const handleLoginSuccess = (newToken) => {
-    console.log("Login successful, setting token"); // Debug log
-    localStorage.setItem('token', newToken); // Store token in local storage
-    setToken(newToken); // Update state
-    setAuthToken(newToken); // Set Axios header
+    console.log("Login successful, setting token");
+    localStorage.setItem('token', newToken);
+    setToken(newToken);
+    setAuthToken(newToken);
+    try {
+      // --- ⭐ 4. CHANGED: Decode token and store user on login ---
+      const decodedUser = jwtDecode(newToken);
+      
+      // This is the log we added for debugging
+      console.log("FRONTEND: Decoded token object:", decodedUser); 
+
+      setUser({ username: decodedUser.username, role: decodedUser.role });
+    } catch (error) {
+      console.error("Error decoding new token:", error);
+    }
   };
 
-  // Handler for logout
   const handleLogout = () => {
-    console.log("Logout triggered"); // Debug log
-    localStorage.removeItem('token'); // Remove token from storage
-    setToken(null); // Update state
-    setAuthToken(null); // Clear Axios header
+    console.log("Logout triggered");
+    localStorage.removeItem('token');
+    setToken(null);
+    setAuthToken(null);
+    // --- ⭐ 5. CHANGED: Clear the user object ---
+    setUser(null); 
   };
 
-  // Show a loading indicator while the initial token check is happening
   if (isInitializing) {
     return <div className="container mt-5 text-center"><h5>Loading application...</h5></div>;
   }
 
-  // Component to protect routes that require authentication
   const ProtectedRoute = ({ children }) => {
-    // If initialization is done and there's no token, redirect to login
     if (!token) {
       return <Navigate to="/login" replace />;
     }
-    // Otherwise, render the requested component
     return children;
   };
 
   return (
     <Router>
-      {/* Conditionally render Navbar only if logged in (token exists) */}
-      {token && <Navbar onLogout={handleLogout} />}
+      {/* --- ⭐ 6. CHANGED: Pass the full user object to Navbar --- */}
+      {token && <Navbar user={user} onLogout={handleLogout} />}
 
       <div className="container mt-4">
-        {/* Render Routes only after initialization is complete */}
         <Routes>
-          {/* --- Public Login Route --- */}
-          {/* If there's no token, show Login page. If token exists, redirect to Home. */}
           <Route
             path="/login"
             element={!token ? <LoginPage onLoginSuccess={handleLoginSuccess} /> : <Navigate to="/" replace />}
           />
 
-          {/* --- Protected Main Routes --- */}
-          {/* Wrap each protected route's element with the ProtectedRoute component */}
-          <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-          <Route path="/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
+          {/* --- ⭐ 7. CHANGED: Pass user.role to the pages that need it --- */}
+          <Route path="/" element={<ProtectedRoute><HomePage userRole={user?.role} /></ProtectedRoute>} />
+          <Route path="/customers" element={<ProtectedRoute><CustomersPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans" element={<ProtectedRoute><AllLoansPage /></ProtectedRoute>} />
           <Route path="/overdue" element={<ProtectedRoute><OverdueLoansPage /></ProtectedRoute>} />
-          <Route path="/new-loan" element={<ProtectedRoute><NewLoanWorkflowPage /></ProtectedRoute>} />
+          <Route path="/new-loan" element={<ProtectedRoute><NewLoanWorkflowPage userRole={user?.role} /></ProtectedRoute>} />
+          
           <Route path="/customers/:id" element={<ProtectedRoute><CustomerPage /></ProtectedRoute>} />
           <Route path="/loans/:id" element={<ProtectedRoute><LoanPage /></ProtectedRoute>} />
           <Route path="/loans/:id/edit" element={<ProtectedRoute><EditLoanPage /></ProtectedRoute>} />
 
-          {/* --- Catch-all Route --- */}
-          {/* Redirects any unmatched path. If logged in, go to Home, otherwise go to Login. */}
            <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
         </Routes>
       </div>
