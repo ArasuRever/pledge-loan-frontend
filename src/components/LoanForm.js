@@ -2,13 +2,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+const API_URL = process.env.REACT_APP_API_URL; // API_URL is included
 
 // --- Modal Styles ---
+// ⚠️ THIS IS THE PART I MISSED. IT IS NOW CORRECTED.
 const modalStyles = {
-// ... (styles are unchanged) ...
+  position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+  backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex',
+  justifyContent: 'center', alignItems: 'center', zIndex: 1000,
 };
-// ... (styles are unchanged) ...
+const modalContentStyles = {
+  backgroundColor: 'white', padding: '20px', borderRadius: '8px', textAlign: 'center',
+};
 // --- End Styles ---
 
 function LoanForm({ customerId, onLoanAdded }) {
@@ -82,7 +87,7 @@ function LoanForm({ customerId, onLoanAdded }) {
       formData.append('deductFirstMonthInterest', deductFirstMonthInterest);
 
       try {
-        // 2. USE THE VARIABLE HERE
+        // USE THE VARIABLE HERE
         await axios.post(`${API_URL}/api/loans`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('New loan added!');
         setPrincipal(''); setInterestRate('2.5'); setBookLoanNumber(''); setItemType('gold'); // Reset rate to default
@@ -100,7 +105,6 @@ function LoanForm({ customerId, onLoanAdded }) {
   return (
     <div className="card my-4">
       <div className="card-body">
-        {/* ... (rest of the JSX is unchanged) ... */}
         <h4 className="card-title">Create New Pledge</h4>
         <form onSubmit={handleSubmit}>
           <div className="row">
@@ -203,7 +207,7 @@ function LoanForm({ customerId, onLoanAdded }) {
         {/* Camera Modal */}
         {showCameraModal && (
           <div style={modalStyles}>
-            <div style={modalContentStyles}>
+            <div style={modalContentStyles}> {/* This line 206 was causing the error */}
               <h5>Camera Capture</h5>
               <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', maxWidth: '400px', marginBottom: '15px', border:'1px solid #ccc' }}></video>
               <div>
