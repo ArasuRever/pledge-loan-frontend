@@ -85,7 +85,8 @@ function NewLoanWorkflowPage({ userRole }) {
         <div className="alert alert-info">
             {message}
             {/* --- ⭐ CHANGED: Only show Create Customer button to admins --- */}
-            {message.includes('not found') && userRole === 'admin' && (
+            {/* --- ⭐ CHANGED: Allow 'staff' to see this button --- */}
+            {message.includes('not found') && (userRole === 'admin' || userRole === 'staff') && (
                 <button onClick={handleCreateCustomer} className="btn btn-success btn-sm ms-3">
                     + Create New Customer
                 </button>

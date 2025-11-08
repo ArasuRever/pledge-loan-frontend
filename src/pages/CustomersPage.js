@@ -32,14 +32,15 @@ function CustomersPage({ userRole }) {
   return (
     <div className="row">
       {/* --- ⭐ CHANGED: Conditionally show Add Customer form --- */}
-      {userRole === 'admin' && (
+      {/* --- ⭐ CHANGED: Allow 'staff' to see this --- */}
+      {(userRole === 'admin' || userRole === 'staff') && (
         <div className="col-md-4">
           <CustomerForm onCustomerAdded={fetchCustomers} />
         </div>
       )}
 
       {/* --- ⭐ CHANGED: Make list full-width if user is not admin --- */}
-      <div className={userRole === 'admin' ? "col-md-8" : "col-md-12"}>
+      <div className={(userRole === 'admin' || userRole === 'staff') ? "col-md-8" : "col-md-12"}>
         <h2>Customer List</h2>
         <input
           type="text"
