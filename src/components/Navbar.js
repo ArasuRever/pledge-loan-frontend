@@ -1,3 +1,4 @@
+// src/components/Navbar.js
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -41,9 +42,16 @@ function Navbar({ user, onLogout }) {
             
             {/* --- ⭐ CHANGED: Check for user.role --- */}
             {user?.role === 'admin' && (
-              <li className="nav-item">
-                <Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link>
-              </li>
+              <> {/* <-- Use a fragment to group admin links --> */}
+                <li className="nav-item">
+                  <Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link>
+                </li>
+                
+                {/* 👇 1. ADD THIS NEW LINK 👇 */}
+                <li className="nav-item">
+                  <Link className="nav-link" to="/manage-staff">Manage Staff</Link>
+                </li>
+              </>
             )}
 
             <li className="nav-item">

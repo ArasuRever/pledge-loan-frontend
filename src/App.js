@@ -13,6 +13,7 @@ import { OverdueLoansPage } from './pages/OverdueLoansPage';
 import LoginPage from './pages/LoginPage';
 import NewLoanWorkflowPage from './pages/NewLoanWorkflowPage';
 import EditLoanPage from './pages/EditLoanPage';
+import ManageStaffPage from './pages/ManageStaffPage';
 
 // --- Components ---
 import Navbar from './components/Navbar';
@@ -112,7 +113,7 @@ function App() {
           <Route path="/loans" element={<ProtectedRoute><AllLoansPage /></ProtectedRoute>} />
           <Route path="/overdue" element={<ProtectedRoute><OverdueLoansPage /></ProtectedRoute>} />
           <Route path="/new-loan" element={<ProtectedRoute><NewLoanWorkflowPage userRole={user?.role} /></ProtectedRoute>} />
-          
+          <Route path="/manage-staff" element={<ProtectedRoute><ManageStaffPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/customers/:id" element={<ProtectedRoute><CustomerPage /></ProtectedRoute>} />
           <Route path="/loans/:id" element={<ProtectedRoute><LoanPage /></ProtectedRoute>} />
           <Route path="/loans/:id/edit" element={<ProtectedRoute><EditLoanPage /></ProtectedRoute>} />
