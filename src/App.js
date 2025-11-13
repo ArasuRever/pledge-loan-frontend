@@ -1,125 +1,114 @@
+// src/App.js
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode'; // <-- 1. IMPORT ADDED
-
-// --- Pages ---
+import { jwtDecode } from 'jwt-decode'; // Corrected import
+import Navbar from './components/Navbar';
+import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import CustomersPage from './pages/CustomersPage';
 import CustomerPage from './pages/CustomerPage';
-import LoanPage from './pages/LoanPage';
 import AllLoansPage from './pages/AllLoansPage';
-import { OverdueLoansPage } from './pages/OverdueLoansPage';
-import LoginPage from './pages/LoginPage';
+import LoanPage from './pages/LoanPage';
 import NewLoanWorkflowPage from './pages/NewLoanWorkflowPage';
-import EditLoanPage from './pages/EditLoanPage';
+import OverdueLoansPage from './pages/OverdueLoansPage';
 import ManageStaffPage from './pages/ManageStaffPage';
+import EditLoanPage from './pages/EditLoanPage';
 
-// --- Components ---
-import Navbar from './components/Navbar';
+// --- ⭐ NEW IMPORTS ---
+import DeletedCustomersPage from './pages/DeletedCustomersPage';
+import DeletedLoansPage from './pages/DeletedLoansPage';
 
-// Helper function to set the authorization token for Axios requests
-const setAuthToken = (token) => {
+// --- ⭐ NEW: Function to get user role ---
+const getUserRole = () => {
+  const token = localStorage.getItem('token');
   if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    console.log("Axios Auth header SET"); // Debug log
-  } else {
-    delete axios.defaults.headers.common['Authorization'];
-    console.log("Axios Auth header CLEARED"); // Debug log
+    try {
+      const decoded = jwtDecode(token);
+      return decoded.role;
+    } catch (error) {
+      console.error("Invalid token:", error);
+      localStorage.removeItem('token');
+      return null;
+    }
   }
+  return null;
+};
+
+// --- ⭐ NEW: Admin-only route guard ---
+const AdminRoute = ({ children }) => {
+  const userRole = getUserRole();
+  return userRole === 'admin' ? children : <Navigate to="/" />;
+};
+
+// --- Private route guard (unchanged) ---
+const PrivateRoute = ({ children }) => {
+  return localStorage.getItem('token') ? children : <Navigate to="/login" />;
 };
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  
-  // --- ⭐ 2. CHANGED: We now store the whole user object ---
-  const [user, setUser] = useState(null); 
-  
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    console.log("App mounted, checking token:", storedToken);
-    if (storedToken) {
-      setToken(storedToken);
-      setAuthToken(storedToken);
-      try {
-        // --- ⭐ 3. CHANGED: Decode token and store user ---
-        const decodedUser = jwtDecode(storedToken); // { userId, username, role }
-        setUser({ username: decodedUser.username, role: decodedUser.role });
-      } catch (error) {
-        console.error("Invalid token:", error);
-        handleLogout(); // Clear bad token
+    // This logic is from your .env and is correct
+    const url = process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3001/api'
+      : 'https://pledge-loan-api-as.onrender.com/api';
+    setApiBaseUrl(url);
+
+    // Set up axios interceptor to add the auth token
+    const interceptor = axios.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
       }
-    } else {
-       setAuthToken(null);
-    }
-    setIsInitializing(false);
+    );
+
+    return () => {
+      axios.interceptors.request.eject(interceptor);
+    };
   }, []);
 
-  const handleLoginSuccess = (newToken) => {
-    console.log("Login successful, setting token");
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    setAuthToken(newToken);
-    try {
-      // --- ⭐ 4. CHANGED: Decode token and store user on login ---
-      const decodedUser = jwtDecode(newToken);
-      
-      // This is the log we added for debugging
-      console.log("FRONTEND: Decoded token object:", decodedUser); 
-
-      setUser({ username: decodedUser.username, role: decodedUser.role });
-    } catch (error) {
-      console.error("Error decoding new token:", error);
-    }
-  };
-
-  const handleLogout = () => {
-    console.log("Logout triggered");
-    localStorage.removeItem('token');
-    setToken(null);
-    setAuthToken(null);
-    // --- ⭐ 5. CHANGED: Clear the user object ---
-    setUser(null); 
-  };
-
-  if (isInitializing) {
-    return <div className="container mt-5 text-center"><h5>Loading application...</h5></div>;
+  if (!apiBaseUrl) {
+    return <div>Loading...</div>;
   }
 
-  const ProtectedRoute = ({ children }) => {
-    if (!token) {
-      return <Navigate to="/login" replace />;
-    }
-    return children;
-  };
+  // Pass apiBaseUrl to all components via props
+  const privateProps = (element) => React.cloneElement(element, { apiBaseUrl });
+  const adminProps = (element) => <AdminRoute>{privateProps(element)}</AdminRoute>;
 
   return (
     <Router>
-      {/* --- ⭐ 6. CHANGED: Pass the full user object to Navbar --- */}
-      {token && <Navbar user={user} onLogout={handleLogout} />}
-
+      <Navbar />
       <div className="container mt-4">
-        <Routes>
-          <Route
-            path="/login"
-            element={!token ? <LoginPage onLoginSuccess={handleLoginSuccess} /> : <Navigate to="/" replace />}
-          />
+      <Routes>
+        <Route path="/login" element={<LoginPage apiBaseUrl={apiBaseUrl} />} />
+        
+        {/* Private Routes (Staff & Admin) */}
+        <Route path="/" element={privateProps(<PrivateRoute><HomePage /></PrivateRoute>)} />
+        <Route path="/customers" element={privateProps(<PrivateRoute><CustomersPage /></PrivateRoute>)} />
+        <Route path="/customers/:id" element={privateProps(<PrivateRoute><CustomerPage /></PrivateRoute>)} />
+        <Route path="/loans" element={privateProps(<PrivateRoute><AllLoansPage /></PrivateRoute>)} />
+        <Route path="/loans/:id" element={privateProps(<PrivateRoute><LoanPage /></PrivateRoute>)} />
+        <Route path="/loans/:id/edit" element={privateProps(<PrivateRoute><EditLoanPage /></PrivateRoute>)} />
+        <Route path="/new-loan" element={privateProps(<PrivateRoute><NewLoanWorkflowPage /></PrivateRoute>)} />
+        <Route path="/overdue-loans" element={privateProps(<PrivateRoute><OverdueLoansPage /></PrivateRoute>)} />
 
-          {/* --- ⭐ 7. CHANGED: Pass user.role to the pages that need it --- */}
-          <Route path="/" element={<ProtectedRoute><HomePage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/customers" element={<ProtectedRoute><CustomersPage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/loans" element={<ProtectedRoute><AllLoansPage /></ProtectedRoute>} />
-          <Route path="/overdue" element={<ProtectedRoute><OverdueLoansPage /></ProtectedRoute>} />
-          <Route path="/new-loan" element={<ProtectedRoute><NewLoanWorkflowPage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/manage-staff" element={<ProtectedRoute><ManageStaffPage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/customers/:id" element={<ProtectedRoute><CustomerPage /></ProtectedRoute>} />
-          <Route path="/loans/:id" element={<ProtectedRoute><LoanPage /></ProtectedRoute>} />
-          <Route path="/loans/:id/edit" element={<ProtectedRoute><EditLoanPage /></ProtectedRoute>} />
+        {/* Admin Only Routes */}
+        <Route path="/staff" element={adminProps(<ManageStaffPage />)} />
+        
+        {/* --- ⭐ NEW ADMIN ROUTES --- */}
+        <Route path="/deleted-customers" element={adminProps(<DeletedCustomersPage />)} />
+        <Route path="/deleted-loans" element={adminProps(<DeletedLoansPage />)} />
 
-           <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
-        </Routes>
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
       </div>
     </Router>
   );
