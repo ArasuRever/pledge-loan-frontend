@@ -1,149 +1,200 @@
-// src/pages/CustomerPage.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { useParams, Link, useNavigate } from 'react-router-dom'; // Import useNavigate
-import { jwtDecode } from 'jwt-decode'; // Corrected import
+import LoanForm from '../components/LoanForm';
 import EditCustomerForm from '../components/EditCustomerForm';
 
-const CustomerPage = ({ apiBaseUrl }) => {
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
+function CustomerPage() {
   const { id } = useParams();
-  const navigate = useNavigate(); // For redirecting after delete
   const [customer, setCustomer] = useState(null);
   const [loans, setLoans] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [userRole, setUserRole] = useState(null); // --- ⭐ NEW
-
-  const fetchCustomerAndLoans = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Get user role
-      const token = localStorage.getItem('token');
-      if (token) {
-        setUserRole(jwtDecode(token).role);
-      }
-
-      // Fetch customer
-      const customerRes = await axios.get(`${apiBaseUrl}/customers/${id}`);
-      setCustomer(customerRes.data);
-
-      // Fetch loans
-      const loansRes = await axios.get(`${apiBaseUrl}/customers/${id}/loans`);
-      setLoans(loansRes.data);
-
-      setError(null);
-    } catch (err) {
-      console.error("Error fetching data:", err);
-      setError("Failed to load data.");
-    }
-    setLoading(false);
-  }, [apiBaseUrl, id]);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showLoanForm, setShowLoanForm] = useState(false);
 
   useEffect(() => {
-    fetchCustomerAndLoans();
-  }, [fetchCustomerAndLoans]);
-
-  // --- ⭐ NEW DELETE FUNCTION ---
-  const handleDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete ${customer.name}?\nThis will also delete all their active loans.`)) {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
-        await axios.put(`${apiBaseUrl}/customers/${id}/delete`);
-        alert('Customer deleted successfully.');
-        navigate('/customers'); // Redirect to customers list
+        // 2. USE THE VARIABLE HERE
+        const customerPromise = axios.get(`${API_URL}/api/customers/${id}`);
+        // 3. AND HERE
+        const loansPromise = axios.get(`${API_URL}/api/customers/${id}/loans`);
+        const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
+        setCustomer(customerResponse.data);
+        setLoans(loansResponse.data);
       } catch (err) {
-        console.error("Error deleting customer:", err);
-        alert(`Error: ${err.response?.data?.error || 'Failed to delete customer.'}`);
+        console.error("Error fetching customer data:", err);
+        setError("Customer not found or an error occurred.");
+      } finally {
+        setIsLoading(false);
       }
+    };
+
+    fetchData();
+  }, [id, refreshTrigger]);
+
+  // Helper to get status badge
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'overdue':
+        return <span className="badge bg-danger rounded-pill">Overdue</span>;
+      case 'active':
+        return <span className="badge bg-primary rounded-pill">Active</span>;
+      case 'paid':
+        return <span className="badge bg-success rounded-pill">Paid</span>;
+      case 'forfeited':
+        return <span className="badge bg-secondary rounded-pill">Forfeited</span>;
+      default:
+        return null;
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
-  if (!customer) return <div>Customer not found.</div>;
+  if (isLoading) return <div className="text-center p-5"><div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div></div>;
+  if (error) return <div className="alert alert-danger"><p>{error}</p><Link to="/customers">Go back to Customers</Link></div>;
+  if (!customer) return null;
+
+  if (isEditing) {
+      return (
+          <EditCustomerForm 
+              customer={customer} 
+              onUpdate={() => { 
+                  setIsEditing(false);
+                  setRefreshTrigger(t => t + 1);
+              }}
+              onCancel={() => setIsEditing(false)}
+          />
+      );
+  }
+  
+  const activeLoans = loans.filter(loan => loan.status === 'active' || loan.status === 'overdue');
+  const closedLoans = loans.filter(loan => loan.status === 'paid' || loan.status === 'forfeited');
 
   return (
-    <div className="container mx-auto p-4">
-      {isEditing ? (
-        <EditCustomerForm
-          customer={customer}
-          apiBaseUrl={apiBaseUrl}
-          onSuccess={() => {
-            setIsEditing(false);
-            fetchCustomerAndLoans();
-          }}
-          onCancel={() => setIsEditing(false)}
-        />
-      ) : (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-3xl font-bold">{customer.name}</h1>
-            <div>
-              <button
-                onClick={() => setIsEditing(true)}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-              >
-                Edit Customer
+    <div>
+      {/* --- 1. CUSTOMER PROFILE HEADER (Full Width) --- */}
+      <div className="card shadow-sm mb-4">
+        <div className="card-body">
+          <div className="row">
+            <div className="col-md-2 col-sm-3 text-center">
+              <img 
+                src={customer.customer_image_url || 'https://via.placeholder.com/150'} 
+                alt={customer.name}
+                className="img-fluid rounded-circle"
+                style={{ width: '120px', height: '120px', objectFit: 'cover' }} 
+              />
+            </div>
+            <div className="col-md-7 col-sm-9">
+              <h2 className="mb-1">{customer.name}</h2>
+              <p className="text-muted mb-1">
+                <i className="bi bi-phone me-2"></i>{customer.phone_number}
+              </p>
+              <p className="text-muted">
+                <i className="bi bi-geo-alt me-2"></i>{customer.address}
+              </p>
+            </div>
+            <div className="col-md-3 text-md-end mt-2 mt-md-0">
+              <button className="btn btn-outline-secondary btn-sm" onClick={() => setIsEditing(true)}>
+                <i className="bi bi-pencil me-1"></i> Edit Profile
               </button>
-              {/* --- ⭐ NEW DELETE BUTTON (ADMIN ONLY) --- */}
-              {userRole === 'admin' && (
-                <button
-                  onClick={handleDelete}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded ml-2"
-                >
-                  Delete Customer
-                </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* --- 2. NEW TWO-COLUMN LAYOUT --- */}
+      <div className="row">
+        
+        {/* --- 2A. LEFT COLUMN (Pledge Form) --- */}
+        <div className="col-md-5 col-lg-4">
+          <div className="d-grid mb-3">
+            <button className={`btn ${showLoanForm ? 'btn-danger' : 'btn-primary'}`} onClick={() => setShowLoanForm(!showLoanForm)}>
+              {showLoanForm ? <i className="bi bi-x-lg me-1"></i> : <i className="bi bi-plus-lg me-1"></i>}
+              {showLoanForm ? 'Cancel New Pledge' : 'Create New Pledge'}
+            </button>
+          </div>
+          
+          {showLoanForm && (
+            <LoanForm 
+              customerId={id} 
+              onLoanAdded={() => {
+                setRefreshTrigger(t => t + 1);
+                setShowLoanForm(false); // Hide form on success
+              }} 
+            />
+          )}
+        </div>
+
+        {/* --- 2B. RIGHT COLUMN (Loan Lists) --- */}
+        <div className="col-md-7 col-lg-8">
+          
+          {/* --- Active Loans Card --- */}
+          <div className="card shadow-sm mb-4">
+            <div className="card-header">
+              <h5 className="mb-0">Active Loans</h5>
+            </div>
+            <div className="card-body">
+              {activeLoans.length > 0 ? (
+                <div className="list-group list-group-flush">
+                  {activeLoans.map(loan => (
+                    <Link key={loan.loan_id} to={`/loans/${loan.loan_id}`} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0">
+                      <div>
+                        <strong>Book #: {loan.book_loan_number} (Loan #{loan.loan_id})</strong>
+                          <span className="ms-2">- ₹{parseFloat(loan.principal_amount).toLocaleString('en-IN')}</span>
+                          <span className="text-muted ms-2">{loan.description ? `(${loan.description})` : ''}</span>
+                        <small className="d-block text-muted">
+                          Pledged: {new Date(loan.pledge_date).toLocaleDateString()} | Due: {new Date(loan.due_date).toLocaleDateString()}
+                        </small>
+                      </div>
+                      {getStatusBadge(loan.status)}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p>No active loans.</p>
               )}
             </div>
           </div>
-          {customer.customer_image_url && (
-            <img 
-              src={customer.customer_image_url} 
-              alt={customer.name} 
-              className="w-32 h-32 rounded-full object-cover mb-4" 
-            />
-          )}
-          <p className="text-lg mb-2"><strong>Phone:</strong> {customer.phone_number}</p>
-          <p className="text-lg"><strong>Address:</strong> {customer.address}</p>
-        </div>
-      )}
 
-      <div className="mt-8">
-        <h2 className="text-2xl font-bold mb-4">Loans</h2>
-        {/* ... (rest of the loan list is unchanged) ... */}
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border">
-            <thead className="bg-gray-200">
-              <tr>
-                <th className="py-2 px-4 border">Book #</th>
-                <th className="py-2 px-4 border">Amount</th>
-                <th className="py-2 px-4 border">Description</th>
-                <th className="py-2 px-4 border">Status</th>
-                <th className="py-2 px-4 border">Pledge Date</th>
-                <th className="py-2 px-4 border">Due Date</th>
-                <th className="py-2 px-4 border">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loans.map(loan => (
-                <tr key={loan.loan_id} className="hover:bg-gray-100">
-                  <td className="py-2 px-4 border">{loan.book_loan_number}</td>
-                  <td className="py-2 px-4 border">₹{parseFloat(loan.principal_amount).toLocaleString('en-IN')}</td>
-                  <td className="py-2 px-4 border">{loan.description}</td>
-                  <td className="py-2 px-4 border">{loan.status}</td>
-                  <td className="py-2 px-4 border">{new Date(loan.pledge_date).toLocaleDateString()}</td>
-                  <td className="py-2 px-4 border">{new Date(loan.due_date).toLocaleDateString()}</td>
-                  <td className="py-2 px-4 border">
-                    <Link to={`/loans/${loan.loan_id}`} className="text-blue-500 hover:underline">View</Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* --- Closed Loans Card --- */}
+          <div className="card shadow-sm mb-4">
+            <div className="card-header">
+              <h5 className="mb-0">Closed Loans</h5>
+            </div>
+            <div className="card-body">
+              {closedLoans.length > 0 ? (
+                <div className="list-group list-group-flush">
+                  {closedLoans.map(loan => (
+                    <Link key={loan.loan_id} to={`/loans/${loan.loan_id}`} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 list-group-item-light text-muted">
+                      <div>
+                        <strong>Book #: {loan.book_loan_number} (Loan #{loan.loan_id})</strong>
+<span className="ms-2">- ₹{parseFloat(loan.principal_amount).toLocaleString('en-IN')}</span>
+                        <small className="d-block text-muted">Pledged: {new Date(loan.pledge_date).toLocaleDateString()}</small>
+                      </div>
+                      {getStatusBadge(loan.status)}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p>No closed loans.</p>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
+      
+      <Link to="/customers" className="btn btn-secondary mt-3">
+        <i className="bi bi-arrow-left me-1"></i>
+        Back to Customers
+      </Link>
     </div>
   );
-};
+}
 
 export default CustomerPage;

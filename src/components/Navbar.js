@@ -1,91 +1,87 @@
 // src/components/Navbar.js
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode'; // Corrected import
+import axios from 'axios';
 
-const Navbar = () => {
+const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+
+// --- ⭐ CHANGED: Accept `user` prop ---
+function Navbar({ user, onLogout }) {
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
-  let userRole = null;
-  let username = null;
 
-  if (token) {
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!searchTerm.trim()) return;
+
     try {
-      const decodedToken = jwtDecode(token);
-      userRole = decodedToken.role;
-      username = decodedToken.username;
+      // 2. USE THE VARIABLE HERE
+      const response = await axios.get(`${API_URL}/api/loans/find-by-book-number/${searchTerm}`);
+      navigate(`/loans/${response.data.loanId}`);
+      setSearchTerm('');
     } catch (error) {
-      console.error("Invalid token:", error);
-      localStorage.removeItem('token');
-      // No navigation here, just log out state
+      alert('Loan not found.');
     }
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
   };
 
   return (
-    <nav className="bg-gray-800 text-white p-4">
-      <div className="container mx-auto flex justify-between items-center">
-        <Link to="/" className="text-xl font-bold">Pledge Loan Mgmt</Link>
-        
-        <div className="flex items-center space-x-4">
-          {token ? (
-            <>
-              {/* --- Admin Only Links --- */}
-              {userRole === 'admin' && (
-                <>
-                  <Link to="/" className="hover:text-gray-300">Dashboard</Link>
-                  <Link to="/staff" className="hover:text-gray-300">Manage Staff</Link>
-                  
-                  {/* --- ⭐ NEW RECYCLE BIN DROPDOWN --- */}
-                  <div className="relative group">
-                    <button className="hover:text-gray-300 focus:outline-none">
-                      Recycle Bin
-                    </button>
-                    <div className="absolute right-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg py-1 z-20 hidden group-hover:block">
-                      <Link 
-                        to="/deleted-customers" 
-                        className="block px-4 py-2 text-sm text-white hover:bg-gray-600"
-                      >
-                        Deleted Customers
-                      </Link>
-                      <Link 
-                        to="/deleted-loans" 
-                        className="block px-4 py-2 text-sm text-white hover:bg-gray-600"
-                      >
-                        Deleted Loans
-                      </Link>
-                    </div>
-                  </div>
-                  {/* --- END NEW DROPDOWN --- */}
+    <nav className="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+      <div className="container-fluid">
+        <Link className="navbar-brand" to="/">PledgeManager</Link>
+        <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+          <span className="navbar-toggler-icon"></span>
+        </button>
+        <div className="collapse navbar-collapse" id="navbarContent">
+          <ul className="navbar-nav me-auto mb-2 mb-lg-0">
+            <li className="nav-item">
+              <Link className="nav-link" to="/customers">Customers</Link>
+            </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/loans">Loans</Link>
+            </li>
+            
+            {/* --- ⭐ CHANGED: Check for user.role --- */}
+            {user?.role === 'admin' && (
+              <> {/* <-- Use a fragment to group admin links --> */}
+                <li className="nav-item">
+                  <Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link>
+                </li>
+                
+                {/* 👇 1. ADD THIS NEW LINK 👇 */}
+                <li className="nav-item">
+                  <Link className="nav-link" to="/manage-staff">Manage Staff</Link>
+                </li>
+              </>
+            )}
 
-                </>
-              )}
+            <li className="nav-item">
+              <Link className="nav-link text-success fw-bold" to="/new-loan">New Loan</Link>
+            </li>
+          </ul>
 
-              {/* --- Common Links for Admin & Staff --- */}
-              <Link to="/customers" className="hover:text-gray-300">Customers</Link>
-              <Link to="/loans" className="hover:text-gray-300">All Loans</Link>
-              <Link to="/new-loan" className="hover:text-gray-300">New Loan</Link>
-              
-              <span className="text-gray-400">|</span>
-              <span className="font-medium">{username} ({userRole})</span>
-              <button
-                onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <Link to="/login" className="hover:text-gray-300">Login</Link>
+          {/* --- ⭐ NEW: WELCOME MESSAGE --- */}
+          {user && (
+            <span className="navbar-text me-3">
+              Welcome, {user.username} ({user.role})
+            </span>
           )}
+          {/* --- END NEW MESSAGE --- */}
+
+          <form className="d-flex" onSubmit={handleSearch}>
+            <input 
+              className="form-control me-2" 
+              type="search" 
+              placeholder="Search by Book Loan #" 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+            <button className="btn btn-outline-success" type="submit">Search</button>
+          </form>
+          <button className="btn btn-outline-light ms-2" onClick={onLogout}>Logout</button>
         </div>
       </div>
     </nav>
   );
-};
+}
 
 export default Navbar;

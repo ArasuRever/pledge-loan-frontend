@@ -1,110 +1,115 @@
-import React, { useRef } from 'react';
-import { useReactToPrint } from 'react-to-print';
+import React from 'react';
 
-// --- ⭐ FIX 1: Removed 'export' from this line ---
-const PrintableInvoice = ({ loan, calculated, onClose }) => {
-  const componentRef = useRef();
-  
-  const handlePrint = useReactToPrint({
-    content: () => componentRef.current,
-  });
+// Use React.forwardRef and a NAMED export
+export const PrintableInvoice = React.forwardRef(({ loanDetails }, ref) => {
+
+  // Inline styles for printing - helps maintain layout across print/PDF
+  const containerStyle = { padding: '20mm', fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' };
+  const headerStyle = { textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '10px', marginBottom: '15px' };
+  const flexBetween = { display: 'flex', justifyContent: 'space-between', marginTop: '15px', marginBottom: '15px' };
+  const sectionTitleStyle = { marginTop: '15px', marginBottom: '5px', borderBottom: '1px solid #ccc', paddingBottom: '3px' };
+  const hrStyle = { border: 0, borderTop: '1px dashed #ccc', margin: '15px 0' };
+  const tableStyle = { width: '100%', borderCollapse: 'collapse', marginTop: '10px', fontSize: '9pt' };
+  const thStyle = { border: '1px solid black', padding: '6px', textAlign: 'left', backgroundColor: '#eee', fontWeight: 'bold' };
+  const tdStyle = { border: '1px solid black', padding: '6px' };
+  const signatureSection = { marginTop: '40px', paddingTop: '20px', borderTop: '1px dashed #ccc' };
+  const footerStyle = { marginTop: '20px', fontSize: '8pt', textAlign: 'center', color: '#555' };
+
+  // Handle case where data might not be ready yet (though LoanPage should ensure it is)
+  if (!loanDetails) {
+    return <div ref={ref}>Loading invoice data...</div>;
+  }
+
+  // Format currency consistently
+  const formatCurrency = (amount) => {
+      const num = parseFloat(amount);
+      if (isNaN(num)) return '₹ --';
+      return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Format dates consistently
+  const formatDate = (dateString) => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-GB'); // dd/mm/yyyy format
+    } catch (e) {
+      return 'Invalid Date';
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-40">
-      <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl">
-        
-        {/* Header and Print Button */}
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Print Invoice</h2>
-          <div>
-            <button
-              onClick={handlePrint}
-              className="bg-blue-500 text-white px-4 py-2 rounded mr-2"
-            >
-              Print
-            </button>
-            <button
-              onClick={onClose}
-              className="bg-gray-400 text-white px-4 py-2 rounded"
-            >
-              Close
-            </button>
-          </div>
+    // Use the ref on the outermost div that contains everything to be printed/captured
+    <div ref={ref} style={containerStyle}>
+      <h2 style={headerStyle}>
+        PLEDGE INVOICE / RECEIPT
+      </h2>
+
+      <div style={flexBetween}>
+        <div>
+          <h4>Loan #{loanDetails.id}</h4>
+          <p style={{ margin: '2px 0' }}><strong>Book Loan #:</strong> {loanDetails.book_loan_number || 'N/A'}</p>
         </div>
-
-        {/* Printable Area */}
-        <div ref={componentRef} className="p-8 border rounded">
-          <h1 className="text-3xl font-bold text-center mb-2">Sri Kubera Pawn</h1>
-          <p className="text-center text-sm mb-6">123 Main St, Your Town, 12345 | Phone: (123) 456-7890</p>
-          
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div>
-              <h3 className="text-lg font-semibold">Customer Details</h3>
-              <p><strong>Name:</strong> {loan.customer_name}</p>
-              <p><strong>Phone:</strong> {loan.phone_number}</p>
-            </div>
-            <div className="text-right">
-              <h3 className="text-lg font-semibold">Loan Details</h3>
-              <p><strong>Loan (Book #):</strong> {loan.book_loan_number}</p>
-              <p><strong>Pledge Date:</strong> {new Date(loan.pledge_date).toLocaleDateString()}</p>
-            </div>
-          </div>
-
-          <h3 className="text-lg font-semibold mb-2">Item Details</h3>
-          <table className="min-w-full border mb-6">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="py-1 px-2 border">Description</th>
-                <th className="py-1 px-2 border">Type</th>
-                <th className="py-1 px-2 border">Weight</th>
-                <th className="py-1 px-2 border">Quality</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="py-1 px-2 border">{loan.description}</td>
-                <td className="py-1 px-2 border">{loan.item_type}</td>
-                <td className="py-1 px-2 border">{loan.weight} g</td>
-                <td className="py-1 px-2 border">{loan.quality}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <h3 className="text-lg font-semibold mb-2">Financial Summary</h3>
-          <table className="min-w-full border mb-6">
-            <tbody>
-              <tr>
-                <td className="py-1 px-2 border w-1/2">Principal Amount</td>
-                <td className="py-1 px-2 border text-right">₹{parseFloat(loan.principal_amount).toLocaleString('en-IN')}</td>
-              </tr>
-              <tr>
-                <td className="py-1 px-2 border">Interest Rate</td>
-                <td className="py-1 px-2 border text-right">{loan.interest_rate}% per month</td>
-              </tr>
-              <tr className="bg-gray-50">
-                <td className="py-1 px-2 border font-bold">Outstanding Principal</td>
-                <td className="py-1 px-2 border text-right font-bold">₹{parseFloat(calculated.outstandingPrincipal).toLocaleString('en-IN')}</td>
-              </tr>
-              <tr className="bg-gray-50">
-                <td className="py-1 px-2 border font-bold">Outstanding Interest</td>
-                <td className="py-1 px-2 border text-right font-bold">₹{parseFloat(calculated.outstandingInterest).toLocaleString('en-IN')}</td>
-              </tr>
-              <tr className="bg-gray-100">
-                <td className="py-2 px-2 border text-xl font-bold">Total Amount Due</td>
-                <td className="py-2 px-2 border text-right text-xl font-bold">₹{parseFloat(calculated.amountDue).toLocaleString('en-IN')}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div className="mt-8 text-xs text-gray-500">
-            <p>Thank you for your business!</p>
-            <p>Terms and conditions apply. Interest is calculated monthly.</p>
-          </div>
+        <div>
+          <p style={{ margin: '2px 0' }}><strong>Date:</strong> {formatDate(loanDetails.pledge_date)}</p>
+          <p style={{ margin: '2px 0' }}><strong>Due Date:</strong> {formatDate(loanDetails.due_date)}</p>
         </div>
       </div>
+
+      <hr style={hrStyle} />
+
+      <h4 style={sectionTitleStyle}>Customer Details</h4>
+      <p style={{ margin: '2px 0' }}>
+        <strong>Name:</strong> {loanDetails.customer_name}<br />
+        <strong>Phone:</strong> {loanDetails.phone_number}<br/>
+        {loanDetails.address && <><strong>Address:</strong> {loanDetails.address}<br/></>}
+      </p>
+
+      <hr style={hrStyle} />
+
+      <h4 style={sectionTitleStyle}>Loan Details</h4>
+      <table style={tableStyle}>
+        <thead>
+          <tr>
+            <th style={thStyle}>Principal Amount</th>
+            <th style={thStyle}>Interest Rate (p.a.)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={tdStyle}>{formatCurrency(loanDetails.principal_amount)}</td>
+            <td style={tdStyle}>{loanDetails.interest_rate}%</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4 style={sectionTitleStyle}>Pledged Item(s)</h4>
+      <table style={tableStyle}>
+        <thead>
+          <tr>
+            <th style={thStyle}>Description</th>
+            <th style={thStyle}>Type</th>
+            <th style={thStyle}>Quality</th>
+            <th style={{...thStyle, textAlign: 'right'}}>Weight (g)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={tdStyle}>{loanDetails.description || 'N/A'}</td>
+            <td style={tdStyle}>{loanDetails.item_type || 'N/A'}</td>
+            <td style={tdStyle}>{loanDetails.quality || 'N/A'}</td>
+            <td style={{...tdStyle, textAlign: 'right'}}>{loanDetails.weight ? `${loanDetails.weight}g` : 'N/A'}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style={signatureSection}>
+        <p>Customer Signature: _________________________</p>
+        <br />
+        <p>Manager Signature: _________________________</p>
+      </div>
+
+      <p style={footerStyle}>
+        Thank you for your business. | PledgeManager
+      </p>
     </div>
   );
-};
-
-// --- ⭐ FIX 2: Added this default export at the bottom ---
-export default PrintableInvoice;
+});
