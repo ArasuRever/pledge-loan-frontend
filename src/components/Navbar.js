@@ -47,9 +47,13 @@ function Navbar({ user, onLogout }) {
                   <Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link>
                 </li>
                 
-                {/* 👇 1. ADD THIS NEW LINK 👇 */}
                 <li className="nav-item">
                   <Link className="nav-link" to="/manage-staff">Manage Staff</Link>
+                </li>
+
+                {/* --- NEW: Recycle Bin Link --- */}
+                <li className="nav-item">
+                  <Link className="nav-link" to="/recycle-bin">Recycle Bin</Link>
                 </li>
               </>
             )}

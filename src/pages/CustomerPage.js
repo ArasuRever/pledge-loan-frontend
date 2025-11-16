@@ -1,12 +1,15 @@
+// src/pages/CustomerPage.js
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+// --- NEW: Import useNavigate ---
+import { useParams, Link, useNavigate } from 'react-router-dom'; 
 import axios from 'axios';
 import LoanForm from '../components/LoanForm';
 import EditCustomerForm from '../components/EditCustomerForm';
 
-const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+const API_URL = process.env.REACT_APP_API_URL;
 
-function CustomerPage() {
+// --- NEW: Accept userRole prop ---
+function CustomerPage({ userRole }) {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
   const [loans, setLoans] = useState([]);
@@ -15,15 +18,16 @@ function CustomerPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showLoanForm, setShowLoanForm] = useState(false);
+  
+  // --- NEW: Initialize useNavigate ---
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        // 2. USE THE VARIABLE HERE
         const customerPromise = axios.get(`${API_URL}/api/customers/${id}`);
-        // 3. AND HERE
         const loansPromise = axios.get(`${API_URL}/api/customers/${id}/loans`);
         const [customerResponse, loansResponse] = await Promise.all([customerPromise, loansPromise]);
         setCustomer(customerResponse.data);
@@ -38,6 +42,21 @@ function CustomerPage() {
 
     fetchData();
   }, [id, refreshTrigger]);
+
+  // --- NEW: Handle Delete Customer ---
+  const handleDeleteCustomer = async () => {
+    if (window.confirm("Are you sure? This will move the customer and their non-active loans to the recycle bin.")) {
+      try {
+        const response = await axios.delete(`${API_URL}/api/customers/${id}`);
+        alert(response.data.message);
+        navigate('/customers'); // Go back to customer list
+      } catch (err) {
+        const errorMsg = err.response?.data?.error || "Failed to delete customer.";
+        console.error("Delete Customer Error:", err);
+        alert(`Error: ${errorMsg}`);
+      }
+    }
+  };
 
   // Helper to get status badge
   const getStatusBadge = (status) => {
@@ -98,10 +117,17 @@ function CustomerPage() {
                 <i className="bi bi-geo-alt me-2"></i>{customer.address}
               </p>
             </div>
+            {/* --- MODIFIED: Added Delete Button --- */}
             <div className="col-md-3 text-md-end mt-2 mt-md-0">
               <button className="btn btn-outline-secondary btn-sm" onClick={() => setIsEditing(true)}>
                 <i className="bi bi-pencil me-1"></i> Edit Profile
               </button>
+              {/* --- NEW DELETE BUTTON --- */}
+              {userRole === 'admin' && (
+                <button className="btn btn-outline-danger btn-sm ms-2" onClick={handleDeleteCustomer}>
+                  <i className="bi bi-trash me-1"></i> Delete
+                </button>
+              )}
             </div>
           </div>
         </div>
