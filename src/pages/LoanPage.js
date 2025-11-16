@@ -1,6 +1,5 @@
 // src/pages/LoanPage.js
 import React, { useState, useEffect, useRef } from 'react';
-// --- NEW: Import useNavigate ---
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import axios from 'axios';
@@ -13,24 +12,43 @@ import LoanHistoryModal from '../components/LoanHistoryModal';
 
 const API_URL = process.env.REACT_APP_API_URL; 
 
-// --- (Modal Styles and other helpers are unchanged) ---
+// --- Modal Styles (CLEANED) ---
 const modalOverlayStyle = {
-  position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-  backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
-  justifyContent: 'center', alignItems: 'center', zIndex: 1050,
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 1050,
 };
 const modalContentStyle = {
-  backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '80%',
-  maxWidth: '800px', maxHeight: '85vh', overflowY: 'auto',
-  border: '1px solid #ccc', boxShadow: '0 5px 15px rgba(0, 0, 0, 0.2)',
+  backgroundColor: 'white',
+  padding: '20px',
+  borderRadius: '8px',
+  width: '80%',
+  maxWidth: '800px',
+  maxHeight: '85vh',
+  overflowY: 'auto',
+  border: '1px solid #ccc',
+  boxShadow: '0 5px 15px rgba(0, 0, 0, 0.2)',
 };
 const modalHeaderStyle = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  borderBottom: '1px solid #eee',
+  paddingBottom: '10px',
+  marginBottom: '15px',
 };
 const modalBodyStyle = { marginBottom: '20px' };
 const modalFooterStyle = {
-  borderTop: '1px solid #eee', paddingTop: '15px', textAlign: 'right',
+  borderTop: '1px solid #eee',
+  paddingTop: '15px',
+  textAlign: 'right',
 };
 const hiddenPrintComponentStyle = {
     position: 'absolute',
@@ -44,6 +62,8 @@ const hiddenPrintComponentStyle = {
     top: '-9999px',
     left: '-9999px',
 };
+// --- End Modal Styles ---
+
 // ... (calculateInterestDetails helper function is unchanged) ...
 const calculateInterestDetails = (loanDetails, transactions = []) => {
     if (!loanDetails || !loanDetails.pledge_date || !loanDetails.principal_amount || !loanDetails.interest_rate || loanDetails.status === 'paid' || loanDetails.status === 'forfeited') {
@@ -113,7 +133,6 @@ const calculateInterestDetails = (loanDetails, transactions = []) => {
     };
 };
 
-// --- NEW: Accept userRole prop ---
 function LoanPage({ userRole }) {
     const { id } = useParams();
     // --- State variables ---
@@ -135,7 +154,6 @@ function LoanPage({ userRole }) {
     // --- Ref ---
     const invoiceRef = useRef();
     
-    // --- NEW: Initialize useNavigate ---
     const navigate = useNavigate();
 
     // --- Handlers (Print, PDF, Settle, Add Principal) ---
@@ -175,9 +193,7 @@ function LoanPage({ userRole }) {
             catch (err) { if (err.response?.data?.error) { alert(`Error: ${err.response.data.error}`); } else { console.error("Add Principal Error:", err); alert('Add principal failed.'); } }
         }
     };
-
-    // --- NEW: Handle Delete Loan ---
-    const handleDeleteLoan = async () => {
+    const handleDeleteLoan = async () => { /* ... Unchanged ... */
       if (window.confirm("Are you sure? This will move the loan to the recycle bin. This can only be done for 'Paid' or 'Forfeited' loans.")) {
         try {
           const response = await axios.delete(`${API_URL}/api/loans/${id}`);
@@ -229,8 +245,6 @@ function LoanPage({ userRole }) {
 
     const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const formatDate = (date) => new Date(date).toLocaleDateString('en-IN'); 
-
-    // --- NEW: Determine if loan is deletable (for admin button) ---
     const isDeletable = loanDetails.status === 'paid' || loanDetails.status === 'forfeited';
 
     return (
@@ -365,7 +379,7 @@ function LoanPage({ userRole }) {
 
             <div className="mt-3"><Link to={`/customers/${loanDetails.customer_id}`} className="btn btn-secondary btn-sm">Back to Customer Page</Link></div>
 
-            {/* Print Preview Modal (unchanged) */}
+            {/* Print Preview Modal (CLEANED) */}
             {showPrintModal && (
                  <div style={modalOverlayStyle}>
                     <div style={modalContentStyle}>
