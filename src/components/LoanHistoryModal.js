@@ -44,6 +44,44 @@ const modalFooterStyle = {
 };
 // --- End Modal Styles ---
 
+// --- Helper component to render the correct log type ---
+const HistoryLogRow = ({ log }) => {
+  // Case 1: It's a financial transaction
+  if (log.event_type === 'transaction') {
+    const amount = parseFloat(log.amount_paid).toLocaleString('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+    
+    const isDisbursement = log.payment_type === 'disbursement';
+    const textClass = isDisbursement ? 'text-danger' : 'text-success';
+    const description = isDisbursement ? 'Disbursed' : `Payment (${log.payment_type})`;
+
+    return (
+      <tr>
+        <td>{new Date(log.changed_at).toLocaleString()}</td>
+        <td>{log.changed_by_username || 'system'}</td>
+        <td colSpan="3">
+          <strong className={textClass}>{description}: {amount}</strong>
+        </td>
+      </tr>
+    );
+  }
+
+  // Case 2: It's an edit
+  return (
+    <tr>
+      <td>{new Date(log.changed_at).toLocaleString()}</td>
+      <td>{log.changed_by_username}</td>
+      <td><strong>{log.field_changed}</strong></td>
+      <td><span className="text-muted">{log.old_value}</span></td>
+      <td><span className="text-dark">{log.new_value}</span></td>
+    </tr>
+  );
+};
+
 function LoanHistoryModal({ loanId, onClose }) {
   const [history, setHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,6 +93,7 @@ function LoanHistoryModal({ loanId, onClose }) {
       setIsLoading(true);
       setError(null);
       try {
+        // This endpoint now returns the combined list
         const response = await axios.get(`${API_URL}/api/loans/${loanId}/history`);
         setHistory(response.data);
       } catch (err) {
@@ -71,7 +110,7 @@ function LoanHistoryModal({ loanId, onClose }) {
     <div style={modalOverlayStyle} onClick={onClose}>
       <div style={modalContentStyle} onClick={e => e.stopPropagation()}>
         <div style={modalHeaderStyle}>
-          <h5 className="modal-title">Loan Audit History (Loan #{loanId})</h5>
+          <h5 className="modal-title">Combined Loan History (Loan #{loanId})</h5>
           <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>
         </div>
         <div style={modalBodyStyle}>
@@ -87,20 +126,14 @@ function LoanHistoryModal({ loanId, onClose }) {
                 <tr>
                   <th>Date / Time</th>
                   <th>User</th>
-                  <th>Field Changed</th>
+                  <th>Field / Event</th>
                   <th>Old Value</th>
                   <th>New Value</th>
                 </tr>
               </thead>
               <tbody>
-                {history.map((log, index) => ( // Added index as a fallback key
-                  <tr key={log.id || index}>
-                    <td>{new Date(log.changed_at).toLocaleString()}</td>
-                    <td>{log.changed_by_username}</td>
-                    <td><strong>{log.field_changed}</strong></td>
-                    <td><span className="text-danger">{log.old_value}</span></td>
-                    <td><span className="text-success">{log.new_value}</span></td>
-                  </tr>
+                {history.map((log, index) => (
+                  <HistoryLogRow key={log.id || index} log={log} />
                 ))}
               </tbody>
             </table>
