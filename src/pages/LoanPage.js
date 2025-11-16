@@ -8,11 +8,12 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import PaymentForm from '../components/PaymentForm';
 import { PrintableInvoice } from '../components/PrintableInvoice';
+// --- 1. NEW: Import the history modal ---
+import LoanHistoryModal from '../components/LoanHistoryModal';
 
 const API_URL = process.env.REACT_APP_API_URL; 
 
 // --- (Modal Styles and other helpers are unchanged) ---
-// ... (rest of modal styles) ...
 const modalOverlayStyle = {
   position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
   backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
@@ -122,6 +123,8 @@ function LoanPage({ userRole }) {
     const [discount, setDiscount] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showPrintModal, setShowPrintModal] = useState(false);
+    // --- 2. NEW: State for history modal ---
+    const [showHistoryModal, setShowHistoryModal] = useState(false); 
     const [additionalAmount, setAdditionalAmount] = useState('');
     const [calculatedInterest, setCalculatedInterest] = useState(0);
     const [calculatedMonths, setCalculatedMonths] = useState(0);
@@ -235,15 +238,17 @@ function LoanPage({ userRole }) {
             {/* Page Header */}
              <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
                  <h2>Loan Details (ID: {loanDetails.id})</h2>
-                 <div> 
+                 {/* --- 3. MODIFIED: Grouped buttons --- */}
+                 <div>
+                    <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => setShowHistoryModal(true)}>
+                         View History
+                    </button>
                     <Link to={`/loans/${id}/edit`} className="btn btn-warning btn-sm me-2">
                          Edit Loan
                     </Link>
                     <button className="btn btn-info btn-sm" onClick={() => setShowPrintModal(true)}>
                         Print / Save Invoice
                     </button>
-                    {/* --- ***THIS IS THE FIX*** --- */}
-                    {/* --- NEW DELETE BUTTON (Admin only & only if deletable) --- */}
                     {userRole === 'admin' && isDeletable && (
                         <button className="btn btn-danger btn-sm ms-2" onClick={handleDeleteLoan}>
                             <i className="bi bi-trash me-1"></i> Delete
@@ -360,6 +365,7 @@ function LoanPage({ userRole }) {
 
             <div className="mt-3"><Link to={`/customers/${loanDetails.customer_id}`} className="btn btn-secondary btn-sm">Back to Customer Page</Link></div>
 
+            {/* Print Preview Modal (unchanged) */}
             {showPrintModal && (
                  <div style={modalOverlayStyle}>
                     <div style={modalContentStyle}>
@@ -377,6 +383,11 @@ function LoanPage({ userRole }) {
                         </div>
                     </div>
                  </div>
+            )}
+
+            {/* --- 4. NEW: Render the history modal --- */}
+            {showHistoryModal && (
+                <LoanHistoryModal loanId={id} onClose={() => setShowHistoryModal(false)} />
             )}
 
             <div style={hiddenPrintComponentStyle}>
