@@ -7,7 +7,6 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import PaymentForm from '../components/PaymentForm';
 import { PrintableInvoice } from '../components/PrintableInvoice';
-// --- 1. NEW: Import the history modal ---
 import LoanHistoryModal from '../components/LoanHistoryModal';
 
 const API_URL = process.env.REACT_APP_API_URL; 
@@ -142,7 +141,6 @@ function LoanPage({ userRole }) {
     const [discount, setDiscount] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showPrintModal, setShowPrintModal] = useState(false);
-    // --- 2. NEW: State for history modal ---
     const [showHistoryModal, setShowHistoryModal] = useState(false); 
     const [additionalAmount, setAdditionalAmount] = useState('');
     const [calculatedInterest, setCalculatedInterest] = useState(0);
@@ -215,6 +213,7 @@ function LoanPage({ userRole }) {
             setCalculatedInterest(0); setCalculatedMonths(0); setCalculatedTotalOwed(0); setCalculatedRate(0);
             setDisbursementDetails([]); 
             try {
+                // --- We now get 'changed_by_username' in the transactions array ---
                 const response = await axios.get(`${API_URL}/api/loans/${id}`);
                 setLoanData(response.data);
                 if (response.data?.loanDetails) {
@@ -238,6 +237,7 @@ function LoanPage({ userRole }) {
     if (!loanData?.loanDetails) return <div className="alert alert-warning">Could not load complete loan details.</div>;
 
     const { loanDetails, transactions } = loanData;
+    // --- The 'transactions' array now contains 'changed_by_username' ---
     const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement') || [];
     const disbursementsMade = transactions?.filter(tx => tx.payment_type === 'disbursement') || [];
     const totalPaid = paymentsReceived.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
@@ -252,7 +252,6 @@ function LoanPage({ userRole }) {
             {/* Page Header */}
              <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
                  <h2>Loan Details (ID: {loanDetails.id})</h2>
-                 {/* --- 3. MODIFIED: Grouped buttons --- */}
                  <div>
                     <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => setShowHistoryModal(true)}>
                          View History
@@ -359,21 +358,52 @@ function LoanPage({ userRole }) {
                 <div className="col-lg-4">
                      {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-info shadow-sm mb-4"> <div className="card-header bg-info text-dark">Disburse More Principal</div> <div className="card-body"> <p className="text-muted small mb-2">Add funds to the existing loan principal.</p> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={additionalAmount} onChange={e => setAdditionalAmount(e.target.value)} placeholder="Amount (₹)"/> <button onClick={handleAddPrincipal} className="btn btn-primary btn-sm">Disburse</button> </div> </div> </div> )}
                      {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-warning shadow-sm mb-4"> <div className="card-header bg-warning text-dark">Payments & Settlement</div> <div className="card-body"> <div className="mb-4"><PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} /></div> <hr className="my-3"/> <div> <h6>Settle & Close Loan</h6> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="Discount (₹)"/> <button onClick={handleSettleAndClose} className="btn btn-success btn-sm">Settle</button> </div> <small className="text-muted d-block mt-1">Enter discount, if any. Balance must be ≤ 0 to close.</small> </div> </div> </div> )}
+                    
+                    {/* --- ⭐ MODIFICATION: Transaction History Card --- */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Transaction History</div>
                         <div className="card-body">
                            <div className="row">
                                <div className="col-6 border-end pe-2">
                                    <h6>Payments Received</h6>
-                                   {paymentsReceived.length > 0 ? (<ul className="list-unstyled small mb-0">{paymentsReceived.map(tx => (<li key={tx.id} className="mb-1 d-flex justify-content-between"><span>{formatDate(tx.payment_date)}: <strong>{formatCurrency(tx.amount_paid)}</strong> ({tx.payment_type})</span></li>))}</ul>) : (<p className="text-muted small mb-0">No payments received.</p>)}
+                                   {paymentsReceived.length > 0 ? (
+                                    <ul className="list-unstyled small mb-0">
+                                      {paymentsReceived.map(tx => (
+                                        <li key={tx.id} className="mb-2">
+                                          <div>{formatDate(tx.payment_date)}: <strong>{formatCurrency(tx.amount_paid)}</strong> ({tx.payment_type})</div>
+                                          {/* --- Show username if it exists --- */}
+                                          {tx.changed_by_username && (
+                                            <small className="text-muted">by: {tx.changed_by_username}</small>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                   ) : (
+                                    <p className="text-muted small mb-0">No payments received.</p>
+                                   )}
                                </div>
                                <div className="col-6 ps-2">
                                    <h6>Disbursements</h6>
-                                    {disbursementsMade.length > 0 ? (<ul className="list-unstyled small mb-0">{disbursementsMade.map(tx => (<li key={tx.id} className="mb-1 d-flex justify-content-between"><span>{formatDate(tx.payment_date)}: <strong>{formatCurrency(tx.amount_paid)}</strong></span></li>))}</ul>) : (<p className="text-muted small mb-0">No additional disbursements.</p>)}
+                                    {disbursementsMade.length > 0 ? (
+                                      <ul className="list-unstyled small mb-0">
+                                        {disbursementsMade.map(tx => (
+                                          <li key={tx.id} className="mb-2">
+                                            <div>{formatDate(tx.payment_date)}: <strong>{formatCurrency(tx.amount_paid)}</strong></div>
+                                            {/* --- Show username if it exists --- */}
+                                            {tx.changed_by_username && (
+                                              <small className="text-muted">by: {tx.changed_by_username}</small>
+                                            )}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <p className="text-muted small mb-0">No additional disbursements.</p>
+                                    )}
                                </div>
                            </div>
                         </div>
                     </div>
+                    {/* --- END MODIFICATION --- */}
                 </div> 
             </div> 
 
@@ -399,7 +429,7 @@ function LoanPage({ userRole }) {
                  </div>
             )}
 
-            {/* --- 4. NEW: Render the history modal --- */}
+            {/* --- Render the history modal --- */}
             {showHistoryModal && (
                 <LoanHistoryModal loanId={id} onClose={() => setShowHistoryModal(false)} />
             )}
