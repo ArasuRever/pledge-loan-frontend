@@ -1,7 +1,8 @@
+// src/App.js
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode'; // <-- 1. IMPORT ADDED
+import { jwtDecode } from 'jwt-decode';
 
 // --- Pages ---
 import HomePage from './pages/HomePage';
@@ -14,6 +15,8 @@ import LoginPage from './pages/LoginPage';
 import NewLoanWorkflowPage from './pages/NewLoanWorkflowPage';
 import EditLoanPage from './pages/EditLoanPage';
 import ManageStaffPage from './pages/ManageStaffPage';
+// --- NEW: Import Recycle Bin Page ---
+import RecycleBinPage from './pages/RecycleBinPage'; 
 
 // --- Components ---
 import Navbar from './components/Navbar';
@@ -31,10 +34,7 @@ const setAuthToken = (token) => {
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
-  
-  // --- ⭐ 2. CHANGED: We now store the whole user object ---
   const [user, setUser] = useState(null); 
-  
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
@@ -44,7 +44,6 @@ function App() {
       setToken(storedToken);
       setAuthToken(storedToken);
       try {
-        // --- ⭐ 3. CHANGED: Decode token and store user ---
         const decodedUser = jwtDecode(storedToken); // { userId, username, role }
         setUser({ username: decodedUser.username, role: decodedUser.role });
       } catch (error) {
@@ -63,12 +62,8 @@ function App() {
     setToken(newToken);
     setAuthToken(newToken);
     try {
-      // --- ⭐ 4. CHANGED: Decode token and store user on login ---
       const decodedUser = jwtDecode(newToken);
-      
-      // This is the log we added for debugging
       console.log("FRONTEND: Decoded token object:", decodedUser); 
-
       setUser({ username: decodedUser.username, role: decodedUser.role });
     } catch (error) {
       console.error("Error decoding new token:", error);
@@ -80,7 +75,6 @@ function App() {
     localStorage.removeItem('token');
     setToken(null);
     setAuthToken(null);
-    // --- ⭐ 5. CHANGED: Clear the user object ---
     setUser(null); 
   };
 
@@ -97,7 +91,6 @@ function App() {
 
   return (
     <Router>
-      {/* --- ⭐ 6. CHANGED: Pass the full user object to Navbar --- */}
       {token && <Navbar user={user} onLogout={handleLogout} />}
 
       <div className="container mt-4">
@@ -107,16 +100,23 @@ function App() {
             element={!token ? <LoginPage onLoginSuccess={handleLoginSuccess} /> : <Navigate to="/" replace />}
           />
 
-          {/* --- ⭐ 7. CHANGED: Pass user.role to the pages that need it --- */}
+          {/* --- Pass user.role to the pages that need it --- */}
           <Route path="/" element={<ProtectedRoute><HomePage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/customers" element={<ProtectedRoute><CustomersPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans" element={<ProtectedRoute><AllLoansPage /></ProtectedRoute>} />
           <Route path="/overdue" element={<ProtectedRoute><OverdueLoansPage /></ProtectedRoute>} />
           <Route path="/new-loan" element={<ProtectedRoute><NewLoanWorkflowPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/manage-staff" element={<ProtectedRoute><ManageStaffPage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/customers/:id" element={<ProtectedRoute><CustomerPage /></ProtectedRoute>} />
-          <Route path="/loans/:id" element={<ProtectedRoute><LoanPage /></ProtectedRoute>} />
+          
+          {/* --- ***THIS IS THE FIX*** --- */}
+          {/* --- Pass userRole to CustomerPage and LoanPage --- */}
+          <Route path="/customers/:id" element={<ProtectedRoute><CustomerPage userRole={user?.role} /></ProtectedRoute>} />
+          <Route path="/loans/:id" element={<ProtectedRoute><LoanPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans/:id/edit" element={<ProtectedRoute><EditLoanPage /></ProtectedRoute>} />
+          
+          {/* --- Add Recycle Bin Route --- */}
+          <Route path="/recycle-bin" element={<ProtectedRoute><RecycleBinPage userRole={user?.role} /></ProtectedRoute>} />
+
 
            <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
         </Routes>

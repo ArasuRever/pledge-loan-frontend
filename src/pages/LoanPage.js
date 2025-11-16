@@ -1,6 +1,7 @@
 // src/pages/LoanPage.js
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+// --- NEW: Import useNavigate ---
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import axios from 'axios';
 import jsPDF from 'jspdf';
@@ -8,15 +9,15 @@ import html2canvas from 'html2canvas';
 import PaymentForm from '../components/PaymentForm';
 import { PrintableInvoice } from '../components/PrintableInvoice';
 
-const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+const API_URL = process.env.REACT_APP_API_URL; 
 
-// --- Simple Modal Styles ---
+// --- (Modal Styles and other helpers are unchanged) ---
+// ... (rest of modal styles) ...
 const modalOverlayStyle = {
   position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
   backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
   justifyContent: 'center', alignItems: 'center', zIndex: 1050,
 };
-// ... (rest of modal styles are unchanged) ...
 const modalContentStyle = {
   backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '80%',
   maxWidth: '800px', maxHeight: '85vh', overflowY: 'auto',
@@ -30,9 +31,6 @@ const modalBodyStyle = { marginBottom: '20px' };
 const modalFooterStyle = {
   borderTop: '1px solid #eee', paddingTop: '15px', textAlign: 'right',
 };
-// --- End Modal Styles ---
-
-// --- Style for Hidden Component for Print/Capture ---
 const hiddenPrintComponentStyle = {
     position: 'absolute',
     overflow: 'hidden',
@@ -45,23 +43,16 @@ const hiddenPrintComponentStyle = {
     top: '-9999px',
     left: '-9999px',
 };
-// --- End Style ---
-
-// --- Helper function for interest calculation (Step-wise, returns detailed events) ---
+// ... (calculateInterestDetails helper function is unchanged) ...
 const calculateInterestDetails = (loanDetails, transactions = []) => {
-    // Check required details
     if (!loanDetails || !loanDetails.pledge_date || !loanDetails.principal_amount || !loanDetails.interest_rate || loanDetails.status === 'paid' || loanDetails.status === 'forfeited') {
-         // Include empty events array in default return
          return { totalInterest: 0, totalMonthsFactor: 0, rateUsed: parseFloat(loanDetails?.interest_rate || 0), totalOwed: parseFloat(loanDetails?.principal_amount || 0), disbursementEvents: [] };
     }
-
     const currentPrincipalTotal = parseFloat(loanDetails.principal_amount);
     const monthlyInterestRatePercent = parseFloat(loanDetails.interest_rate);
     const monthlyInterestRateDecimal = monthlyInterestRatePercent / 100;
     const pledgeDate = new Date(loanDetails.pledge_date);
     const today = new Date();
-
-    // Core Month Calculation Helper
     const calculateTotalMonthsFactor = (startDate, endDate) => {
         if (endDate <= startDate) return 0;
         let fullMonthsPassed = 0;
@@ -81,13 +72,9 @@ const calculateInterestDetails = (loanDetails, transactions = []) => {
         if (totalMonthsFactor === 0 && (endDate.getTime() > startDate.getTime())) { totalMonthsFactor = 0.5; }
         return totalMonthsFactor;
     };
-    // End Core Calculation Helper
-
-    // 1. Get disbursement events
     const disbursements = transactions.filter(tx => tx.payment_type === 'disbursement').sort((a, b) => new Date(a.payment_date) - new Date(b.payment_date));
     const disbursementsSum = disbursements.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
     const initialPrincipal = currentPrincipalTotal - disbursementsSum;
-
     let disbursementEvents = [];
     if (initialPrincipal > 0) {
         disbursementEvents.push({ amount: initialPrincipal, date: pledgeDate, isInitial: true, label: 'Initial Loan' });
@@ -100,11 +87,8 @@ const calculateInterestDetails = (loanDetails, transactions = []) => {
             label: `Top-up #${index + 1}`
         }))
     );
-
     let totalInterest = 0;
     let maxMonthsFactor = 0;
-
-    // 2. Calculate step-wise interest and store details on each event
     for (const event of disbursementEvents) {
         if (event.amount <= 0) {
             event.monthsFactor = 0;
@@ -117,11 +101,8 @@ const calculateInterestDetails = (loanDetails, transactions = []) => {
         totalInterest += event.accruedInterest;
         if (event.isInitial) maxMonthsFactor = monthsFactor;
     }
-
-    // 3. Final calculations
     const totalMonthsFactorReport = maxMonthsFactor > 0 ? maxMonthsFactor : calculateTotalMonthsFactor(pledgeDate, today);
     const totalOwed = currentPrincipalTotal + totalInterest;
-
     return {
         totalInterest,
         totalMonthsFactor: totalMonthsFactorReport,
@@ -130,9 +111,9 @@ const calculateInterestDetails = (loanDetails, transactions = []) => {
         disbursementEvents: disbursementEvents // Return enriched events
     };
 };
-// --- End Helper function ---
 
-function LoanPage() {
+// --- NEW: Accept userRole prop ---
+function LoanPage({ userRole }) {
     const { id } = useParams();
     // --- State variables ---
     const [loanData, setLoanData] = useState(null);
@@ -146,14 +127,17 @@ function LoanPage() {
     const [calculatedMonths, setCalculatedMonths] = useState(0);
     const [calculatedTotalOwed, setCalculatedTotalOwed] = useState(0);
     const [calculatedRate, setCalculatedRate] = useState(0);
-    const [disbursementDetails, setDisbursementDetails] = useState([]); // State for breakdown
+    const [disbursementDetails, setDisbursementDetails] = useState([]); 
 
     // --- Ref ---
     const invoiceRef = useRef();
+    
+    // --- NEW: Initialize useNavigate ---
+    const navigate = useNavigate();
 
-    // --- Handlers (Print, PDF, Settle, Add Principal - Full logic included) ---
+    // --- Handlers (Print, PDF, Settle, Add Principal) ---
     const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false), onPrintError: (err) => { console.error("Print Error:", err); alert("Printing failed."); setShowPrintModal(false); } });
-    const handleSavePdf = async () => { /* ... Full PDF logic from previous correct version ... */
+    const handleSavePdf = async () => { /* ... Full PDF logic ... */
         if (!invoiceRef.current) { console.error("PDF Error: Ref missing."); alert("PDF Error: Ref missing."); setShowPrintModal(false); return; }
         const elementToCapture = invoiceRef.current; const parentDiv = elementToCapture.parentNode; let originalParentStyle = {};
         if (!parentDiv) { console.error("PDF Error: Parent missing."); alert("PDF Error: Parent missing."); setShowPrintModal(false); return; }
@@ -167,39 +151,51 @@ function LoanPage() {
             pdf.save(`Loan-Invoice-${id}.pdf`); setShowPrintModal(false);
         } catch (err) { console.error("PDF Generation Error:", err); alert("PDF Generation Failed."); if (parentDiv) { Object.assign(parentDiv.style, originalParentStyle); } setShowPrintModal(false); }
     };
-    const handleSettleAndClose = async () => {
+    const handleSettleAndClose = async () => { /* ... Unchanged ... */
         const discountValue = parseFloat(discount) || 0;
         if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}. Proceed?`)) {
             try { 
-                // 2. USE THE VARIABLE HERE
                 const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue }); 
                 alert(response.data.message); setRefreshTrigger(t => t + 1); 
             }
             catch (err) { if (err.response?.data?.error) { alert(err.response.data.error); } else { console.error("Settle Error:", err); alert('Settle failed.'); } }
         }
     };
-    const handleAddPrincipal = async () => {
+    const handleAddPrincipal = async () => { /* ... Unchanged ... */
         const amountValue = parseFloat(additionalAmount);
         if (!amountValue || amountValue <= 0) { alert('Please enter a valid positive amount.'); return; }
         if (window.confirm(`Add ₹${amountValue.toFixed(2)} to the principal?`)) {
             try { 
-                // 3. USE THE VARIABLE HERE
                 const response = await axios.post(`${API_URL}/api/loans/${id}/add-principal`, { additionalAmount: amountValue }); 
                 alert(response.data.message); setAdditionalAmount(''); setRefreshTrigger(t => t + 1); 
             }
             catch (err) { if (err.response?.data?.error) { alert(`Error: ${err.response.data.error}`); } else { console.error("Add Principal Error:", err); alert('Add principal failed.'); } }
         }
     };
+
+    // --- NEW: Handle Delete Loan ---
+    const handleDeleteLoan = async () => {
+      if (window.confirm("Are you sure? This will move the loan to the recycle bin. This can only be done for 'Paid' or 'Forfeited' loans.")) {
+        try {
+          const response = await axios.delete(`${API_URL}/api/loans/${id}`);
+          alert(response.data.message);
+          navigate(`/customers/${loanDetails.customer_id}`); // Go to customer page
+        } catch (err) {
+          const errorMsg = err.response?.data?.error || "Failed to delete loan.";
+          console.error("Delete Loan Error:", err);
+          alert(`Error: ${errorMsg}`);
+        }
+      }
+    };
     // --- End Handlers ---
 
-    // Fetch Loan Data & Calculate Interest
+    // Fetch Loan Data & Calculate Interest (Unchanged)
     useEffect(() => {
         const fetchLoanData = async () => {
             setIsLoading(true); setError(null);
             setCalculatedInterest(0); setCalculatedMonths(0); setCalculatedTotalOwed(0); setCalculatedRate(0);
-            setDisbursementDetails([]); // Reset breakdown
+            setDisbursementDetails([]); 
             try {
-                // 4. USE THE VARIABLE HERE
                 const response = await axios.get(`${API_URL}/api/loans/${id}`);
                 setLoanData(response.data);
                 if (response.data?.loanDetails) {
@@ -208,7 +204,7 @@ function LoanPage() {
                     setCalculatedMonths(totalMonthsFactor);
                     setCalculatedRate(rateUsed);
                     setCalculatedTotalOwed(totalOwed);
-                    setDisbursementDetails(disbursementEvents); // Set the detailed breakdown state
+                    setDisbursementDetails(disbursementEvents); 
                 }
             } catch (err) {
                  if (err.response?.status === 404) { setError("Loan not found."); } else { setError("An error occurred fetching data."); } console.error("Fetch Error:", err);
@@ -229,7 +225,10 @@ function LoanPage() {
     const currentBalance = calculatedTotalOwed - totalPaid;
 
     const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const formatDate = (date) => new Date(date).toLocaleDateString('en-IN'); // Use Indian locale for dates
+    const formatDate = (date) => new Date(date).toLocaleDateString('en-IN'); 
+
+    // --- NEW: Determine if loan is deletable (for admin button) ---
+    const isDeletable = loanDetails.status === 'paid' || loanDetails.status === 'forfeited';
 
     return (
         <div>
@@ -243,13 +242,19 @@ function LoanPage() {
                     <button className="btn btn-info btn-sm" onClick={() => setShowPrintModal(true)}>
                         Print / Save Invoice
                     </button>
+                    {/* --- ***THIS IS THE FIX*** --- */}
+                    {/* --- NEW DELETE BUTTON (Admin only & only if deletable) --- */}
+                    {userRole === 'admin' && isDeletable && (
+                        <button className="btn btn-danger btn-sm ms-2" onClick={handleDeleteLoan}>
+                            <i className="bi bi-trash me-1"></i> Delete
+                        </button>
+                    )}
                  </div>
             </div>
 
-            <div className="row g-4"> {/* Main row */}
-                {/* Left Column (col-lg-8) */}
+            {/* --- (Rest of the file is unchanged) --- */}
+            <div className="row g-4"> 
                 <div className="col-lg-8">
-                    {/* Customer Info */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Customer Information</div>
                          <div className="card-body d-flex align-items-center">
@@ -257,7 +262,6 @@ function LoanPage() {
                             <div><h5><Link to={`/customers/${loanDetails.customer_id}`}>{loanDetails.customer_name}</Link></h5><p className="mb-0 text-muted">Phone: {loanDetails.phone_number}</p></div>
                         </div>
                     </div>
-                    {/* Loan Summary */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Loan Summary</div>
                         <div className="card-body">
@@ -271,7 +275,6 @@ function LoanPage() {
                            </div>
                         </div>
                     </div>
-                    {/* Pledged Item */}
                     <div className="card shadow-sm mb-4">
                          <div className="card-header">Pledged Item</div>
                          <div className="card-body d-flex align-items-start">
@@ -279,7 +282,6 @@ function LoanPage() {
                            <div><p className="mb-1"><strong>Description:</strong> {loanDetails.description} ({loanDetails.item_type})</p><p className="mb-0 text-muted"><strong>Quality:</strong> {loanDetails.quality || 'N/A'} | <strong>Weight:</strong> {loanDetails.weight ? `${loanDetails.weight}g` : 'N/A'}</p></div>
                         </div>
                     </div>
-                    {/* Amount Due Calculation Card */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                         <div className="card shadow-sm mb-4 border-success">
                             <div className="card-header bg-success text-white">Amount Due Calculation (as of today)</div>
@@ -296,7 +298,6 @@ function LoanPage() {
                         </div>
                     )}
 
-                    {/* --- NEW: DETAILED INTEREST BREAKDOWN CARD --- */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && disbursementDetails.length > 0 && (
                         <div className="card shadow-sm mb-4 border-info">
                             <div className="card-header bg-info text-dark">Detailed Interest Breakdown</div>
@@ -334,17 +335,11 @@ function LoanPage() {
                             </div>
                         </div>
                     )}
-                    {/* --- END DETAILED INTEREST BREAKDOWN CARD --- */}
+                </div> 
 
-                </div> {/* End Left Column */}
-
-                {/* Right Column (col-lg-4) */}
                 <div className="col-lg-4">
-                     {/* Disburse More Card */}
                      {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-info shadow-sm mb-4"> <div className="card-header bg-info text-dark">Disburse More Principal</div> <div className="card-body"> <p className="text-muted small mb-2">Add funds to the existing loan principal.</p> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={additionalAmount} onChange={e => setAdditionalAmount(e.target.value)} placeholder="Amount (₹)"/> <button onClick={handleAddPrincipal} className="btn btn-primary btn-sm">Disburse</button> </div> </div> </div> )}
-                     {/* Payment & Settlement Card */}
                      {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-warning shadow-sm mb-4"> <div className="card-header bg-warning text-dark">Payments & Settlement</div> <div className="card-body"> <div className="mb-4"><PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} /></div> <hr className="my-3"/> <div> <h6>Settle & Close Loan</h6> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="Discount (₹)"/> <button onClick={handleSettleAndClose} className="btn btn-success btn-sm">Settle</button> </div> <small className="text-muted d-block mt-1">Enter discount, if any. Balance must be ≤ 0 to close.</small> </div> </div> </div> )}
-                     {/* Transaction History */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Transaction History</div>
                         <div className="card-body">
@@ -360,13 +355,11 @@ function LoanPage() {
                            </div>
                         </div>
                     </div>
-                </div> {/* End Right Column */}
-            </div> {/* End Main Row */}
+                </div> 
+            </div> 
 
-            {/* Bottom Navigation */}
             <div className="mt-3"><Link to={`/customers/${loanDetails.customer_id}`} className="btn btn-secondary btn-sm">Back to Customer Page</Link></div>
 
-            {/* Print Preview Modal */}
             {showPrintModal && (
                  <div style={modalOverlayStyle}>
                     <div style={modalContentStyle}>
@@ -386,7 +379,6 @@ function LoanPage() {
                  </div>
             )}
 
-            {/* --- Hidden Print Container --- */}
             <div style={hiddenPrintComponentStyle}>
                 {loanDetails && <PrintableInvoice ref={invoiceRef} loanDetails={loanDetails} />}
             </div>

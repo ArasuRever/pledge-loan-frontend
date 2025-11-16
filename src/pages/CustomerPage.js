@@ -58,7 +58,7 @@ function CustomerPage({ userRole }) {
     }
   };
 
-  // Helper to get status badge
+  // Helper to get status badge (unchanged)
   const getStatusBadge = (status) => {
     switch (status) {
       case 'overdue':
@@ -122,6 +122,7 @@ function CustomerPage({ userRole }) {
               <button className="btn btn-outline-secondary btn-sm" onClick={() => setIsEditing(true)}>
                 <i className="bi bi-pencil me-1"></i> Edit Profile
               </button>
+              {/* --- ***THIS IS THE FIX*** --- */}
               {/* --- NEW DELETE BUTTON --- */}
               {userRole === 'admin' && (
                 <button className="btn btn-outline-danger btn-sm ms-2" onClick={handleDeleteCustomer}>
@@ -133,10 +134,9 @@ function CustomerPage({ userRole }) {
         </div>
       </div>
 
-      {/* --- 2. NEW TWO-COLUMN LAYOUT --- */}
+      {/* --- (Rest of the file is unchanged) --- */}
       <div className="row">
         
-        {/* --- 2A. LEFT COLUMN (Pledge Form) --- */}
         <div className="col-md-5 col-lg-4">
           <div className="d-grid mb-3">
             <button className={`btn ${showLoanForm ? 'btn-danger' : 'btn-primary'}`} onClick={() => setShowLoanForm(!showLoanForm)}>
@@ -156,10 +156,8 @@ function CustomerPage({ userRole }) {
           )}
         </div>
 
-        {/* --- 2B. RIGHT COLUMN (Loan Lists) --- */}
         <div className="col-md-7 col-lg-8">
           
-          {/* --- Active Loans Card --- */}
           <div className="card shadow-sm mb-4">
             <div className="card-header">
               <h5 className="mb-0">Active Loans</h5>
@@ -187,7 +185,6 @@ function CustomerPage({ userRole }) {
             </div>
           </div>
 
-          {/* --- Closed Loans Card --- */}
           <div className="card shadow-sm mb-4">
             <div className="card-header">
               <h5 className="mb-0">Closed Loans</h5>
