@@ -34,6 +34,9 @@ function Navbar({ user, onLogout }) {
         <div className="collapse navbar-collapse" id="navbarContent">
           <ul className="navbar-nav me-auto mb-2 mb-lg-0">
             <li className="nav-item">
+              <Link className="nav-link text-success fw-bold" to="/new-loan">New Loan</Link>
+            </li>
+            <li className="nav-item">
               <Link className="nav-link" to="/customers">Customers</Link>
             </li>
             <li className="nav-item">
@@ -58,9 +61,7 @@ function Navbar({ user, onLogout }) {
               </>
             )}
 
-            <li className="nav-item">
-              <Link className="nav-link text-success fw-bold" to="/new-loan">New Loan</Link>
-            </li>
+            
           </ul>
 
           {/* --- ⭐ NEW: WELCOME MESSAGE --- */}
