@@ -11,7 +11,7 @@ import LoanHistoryModal from '../components/LoanHistoryModal';
 
 const API_URL = process.env.REACT_APP_API_URL; 
 
-// --- Modal Styles (CLEANED) ---
+// --- Modal Styles ---
 const modalOverlayStyle = {
   position: 'fixed',
   top: 0,
@@ -63,77 +63,9 @@ const hiddenPrintComponentStyle = {
 };
 // --- End Modal Styles ---
 
-// ... (calculateInterestDetails helper function is unchanged) ...
-const calculateInterestDetails = (loanDetails, transactions = []) => {
-    if (!loanDetails || !loanDetails.pledge_date || !loanDetails.principal_amount || !loanDetails.interest_rate || loanDetails.status === 'paid' || loanDetails.status === 'forfeited') {
-         return { totalInterest: 0, totalMonthsFactor: 0, rateUsed: parseFloat(loanDetails?.interest_rate || 0), totalOwed: parseFloat(loanDetails?.principal_amount || 0), disbursementEvents: [] };
-    }
-    const currentPrincipalTotal = parseFloat(loanDetails.principal_amount);
-    const monthlyInterestRatePercent = parseFloat(loanDetails.interest_rate);
-    const monthlyInterestRateDecimal = monthlyInterestRatePercent / 100;
-    const pledgeDate = new Date(loanDetails.pledge_date);
-    const today = new Date();
-    const calculateTotalMonthsFactor = (startDate, endDate) => {
-        if (endDate <= startDate) return 0;
-        let fullMonthsPassed = 0;
-        let tempDate = new Date(startDate);
-        while (true) {
-            const nextMonth = tempDate.getMonth() + 1;
-            tempDate.setMonth(nextMonth);
-            if (tempDate.getMonth() !== (nextMonth % 12)) tempDate.setDate(0);
-            if (tempDate <= endDate) { fullMonthsPassed++; }
-            else { tempDate.setMonth(tempDate.getMonth() - 1); break; }
-        }
-        const oneDay = 1000 * 60 * 60 * 24;
-        const remainingDays = Math.floor((endDate.getTime() - tempDate.getTime()) / oneDay);
-        let partialFraction = 0; let totalMonthsFactor;
-        if (fullMonthsPassed === 0) { totalMonthsFactor = 1.0; }
-        else { if (remainingDays > 0) { partialFraction = (remainingDays <= 15) ? 0.5 : 1.0; } totalMonthsFactor = fullMonthsPassed + partialFraction; }
-        if (totalMonthsFactor === 0 && (endDate.getTime() > startDate.getTime())) { totalMonthsFactor = 0.5; }
-        return totalMonthsFactor;
-    };
-    const disbursements = transactions.filter(tx => tx.payment_type === 'disbursement').sort((a, b) => new Date(a.payment_date) - new Date(b.payment_date));
-    const disbursementsSum = disbursements.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
-    const initialPrincipal = currentPrincipalTotal - disbursementsSum;
-    let disbursementEvents = [];
-    if (initialPrincipal > 0) {
-        disbursementEvents.push({ amount: initialPrincipal, date: pledgeDate, isInitial: true, label: 'Initial Loan' });
-    }
-    disbursementEvents = disbursementEvents.concat(
-        disbursements.map((row, index) => ({
-            amount: parseFloat(row.amount_paid),
-            date: new Date(row.payment_date),
-            isInitial: false,
-            label: `Top-up #${index + 1}`
-        }))
-    );
-    let totalInterest = 0;
-    let maxMonthsFactor = 0;
-    for (const event of disbursementEvents) {
-        if (event.amount <= 0) {
-            event.monthsFactor = 0;
-            event.accruedInterest = 0;
-            continue;
-        };
-        const monthsFactor = calculateTotalMonthsFactor(event.date, today);
-        event.monthsFactor = monthsFactor; // Store factor
-        event.accruedInterest = event.amount * monthlyInterestRateDecimal * monthsFactor; // Store interest
-        totalInterest += event.accruedInterest;
-        if (event.isInitial) maxMonthsFactor = monthsFactor;
-    }
-    const totalMonthsFactorReport = maxMonthsFactor > 0 ? maxMonthsFactor : calculateTotalMonthsFactor(pledgeDate, today);
-    const totalOwed = currentPrincipalTotal + totalInterest;
-    return {
-        totalInterest,
-        totalMonthsFactor: totalMonthsFactorReport,
-        rateUsed: monthlyInterestRatePercent,
-        totalOwed,
-        disbursementEvents: disbursementEvents // Return enriched events
-    };
-};
-
 function LoanPage({ userRole }) {
     const { id } = useParams();
+    
     // --- State variables ---
     const [loanData, setLoanData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -143,44 +75,66 @@ function LoanPage({ userRole }) {
     const [showPrintModal, setShowPrintModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false); 
     const [additionalAmount, setAdditionalAmount] = useState('');
+    
+    // --- New State for Backend Calculated Values ---
     const [calculatedInterest, setCalculatedInterest] = useState(0);
-    const [calculatedMonths, setCalculatedMonths] = useState(0);
     const [calculatedTotalOwed, setCalculatedTotalOwed] = useState(0);
-    const [calculatedRate, setCalculatedRate] = useState(0);
     const [disbursementDetails, setDisbursementDetails] = useState([]); 
 
     // --- Ref ---
     const invoiceRef = useRef();
-    
     const navigate = useNavigate();
 
-    // --- Handlers (Print, PDF, Settle, Add Principal) ---
+    // --- Handlers (Unchanged logic, just calling APIs) ---
     const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false), onPrintError: (err) => { console.error("Print Error:", err); alert("Printing failed."); setShowPrintModal(false); } });
-    const handleSavePdf = async () => { /* ... Full PDF logic ... */
-        if (!invoiceRef.current) { console.error("PDF Error: Ref missing."); alert("PDF Error: Ref missing."); setShowPrintModal(false); return; }
-        const elementToCapture = invoiceRef.current; const parentDiv = elementToCapture.parentNode; let originalParentStyle = {};
-        if (!parentDiv) { console.error("PDF Error: Parent missing."); alert("PDF Error: Parent missing."); setShowPrintModal(false); return; }
+    
+    const handleSavePdf = async () => { 
+        if (!invoiceRef.current) return;
+        const elementToCapture = invoiceRef.current; 
+        const parentDiv = elementToCapture.parentNode; 
+        let originalParentStyle = {};
         try {
-            originalParentStyle = { position: parentDiv.style.position, overflow: parentDiv.style.overflow, clip: parentDiv.style.clip, height: parentDiv.style.height, width: parentDiv.style.width, margin: parentDiv.style.margin, padding: parentDiv.style.padding, border: parentDiv.style.border, whiteSpace: parentDiv.style.whiteSpace, visibility: parentDiv.style.visibility, top: parentDiv.style.top, left: parentDiv.style.left, };
+            originalParentStyle = { ...parentDiv.style };
             Object.assign(parentDiv.style, { position: 'absolute', top: '0', left: '0', visibility: 'visible', height: 'auto', width: 'auto', overflow: 'visible', clip: 'auto', margin: '0', padding: '0', border: 'none', whiteSpace: 'normal', backgroundColor: '#ffffff' });
             await new Promise(resolve => setTimeout(resolve, 150));
             const canvas = await html2canvas(elementToCapture, { scale: 2, useCORS: true, logging: true, backgroundColor: '#ffffff', width: elementToCapture.scrollWidth, height: elementToCapture.scrollHeight });
             Object.assign(parentDiv.style, originalParentStyle);
-            const imgData = canvas.toDataURL('image/png'); const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' }); const imgProps=pdf.getImageProperties(imgData);const pdfMargin=10;const pdfWidth=pdf.internal.pageSize.getWidth()-2*pdfMargin;const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;const pageHeight=pdf.internal.pageSize.getHeight()-2*pdfMargin;let heightLeft=pdfHeight;let position=pdfMargin;pdf.addImage(imgData,'PNG',pdfMargin,position,pdfWidth,pdfHeight);heightLeft-=pageHeight;while(heightLeft>0){position=-(pdfHeight-heightLeft-pdfMargin);pdf.addPage();pdf.addImage(imgData,'PNG',pdfMargin,position,pdfWidth,pdfHeight);heightLeft-=pageHeight;}
-            pdf.save(`Loan-Invoice-${id}.pdf`); setShowPrintModal(false);
-        } catch (err) { console.error("PDF Generation Error:", err); alert("PDF Generation Failed."); if (parentDiv) { Object.assign(parentDiv.style, originalParentStyle); } setShowPrintModal(false); }
+            const imgData = canvas.toDataURL('image/png'); 
+            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' }); 
+            const imgProps=pdf.getImageProperties(imgData);
+            const pdfMargin=10;
+            const pdfWidth=pdf.internal.pageSize.getWidth()-2*pdfMargin;
+            const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;
+            let heightLeft=pdfHeight;
+            let position=pdfMargin;
+            pdf.addImage(imgData,'PNG',pdfMargin,position,pdfWidth,pdfHeight);
+            pdf.save(`Loan-Invoice-${id}.pdf`); 
+            setShowPrintModal(false);
+        } catch (err) { 
+            console.error("PDF Generation Error:", err); 
+            alert("PDF Generation Failed."); 
+            if (parentDiv) Object.assign(parentDiv.style, originalParentStyle); 
+            setShowPrintModal(false); 
+        }
     };
-    const handleSettleAndClose = async () => { /* ... Unchanged ... */
+
+    const handleSettleAndClose = async () => { 
         const discountValue = parseFloat(discount) || 0;
         if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}. Proceed?`)) {
             try { 
-                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue }); 
+                // Note: You might want to add a field for 'settlementAmount' in the UI later if needed
+                // For now, assuming full payment of remaining balance - discount
+                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue, settlementAmount: 0 }); 
                 alert(response.data.message); setRefreshTrigger(t => t + 1); 
             }
-            catch (err) { if (err.response?.data?.error) { alert(err.response.data.error); } else { console.error("Settle Error:", err); alert('Settle failed.'); } }
+            catch (err) { 
+                if (err.response?.data?.error) { alert(err.response.data.error); } 
+                else { console.error("Settle Error:", err); alert('Settle failed.'); } 
+            }
         }
     };
-    const handleAddPrincipal = async () => { /* ... Unchanged ... */
+
+    const handleAddPrincipal = async () => { 
         const amountValue = parseFloat(additionalAmount);
         if (!amountValue || amountValue <= 0) { alert('Please enter a valid positive amount.'); return; }
         if (window.confirm(`Add ₹${amountValue.toFixed(2)} to the principal?`)) {
@@ -191,41 +145,43 @@ function LoanPage({ userRole }) {
             catch (err) { if (err.response?.data?.error) { alert(`Error: ${err.response.data.error}`); } else { console.error("Add Principal Error:", err); alert('Add principal failed.'); } }
         }
     };
-    const handleDeleteLoan = async () => { /* ... Unchanged ... */
+
+    const handleDeleteLoan = async () => { 
       if (window.confirm("Are you sure? This will move the loan to the recycle bin. This can only be done for 'Paid' or 'Forfeited' loans.")) {
         try {
           const response = await axios.delete(`${API_URL}/api/loans/${id}`);
           alert(response.data.message);
-          navigate(`/customers/${loanDetails.customer_id}`); // Go to customer page
+          navigate(`/customers/${loanData.loanDetails.customer_id}`); 
         } catch (err) {
-          const errorMsg = err.response?.data?.error || "Failed to delete loan.";
           console.error("Delete Loan Error:", err);
-          alert(`Error: ${errorMsg}`);
+          alert("Failed to delete loan.");
         }
       }
     };
     // --- End Handlers ---
 
-    // Fetch Loan Data & Calculate Interest (Unchanged)
+    // Fetch Loan Data
     useEffect(() => {
         const fetchLoanData = async () => {
             setIsLoading(true); setError(null);
-            setCalculatedInterest(0); setCalculatedMonths(0); setCalculatedTotalOwed(0); setCalculatedRate(0);
             setDisbursementDetails([]); 
             try {
-                // --- We now get 'changed_by_username' in the transactions array ---
                 const response = await axios.get(`${API_URL}/api/loans/${id}`);
                 setLoanData(response.data);
-                if (response.data?.loanDetails) {
-                    const { totalInterest, totalMonthsFactor, rateUsed, totalOwed, disbursementEvents } = calculateInterestDetails(response.data.loanDetails, response.data.transactions);
-                    setCalculatedInterest(totalInterest);
-                    setCalculatedMonths(totalMonthsFactor);
-                    setCalculatedRate(rateUsed);
-                    setCalculatedTotalOwed(totalOwed);
-                    setDisbursementDetails(disbursementEvents); 
+                
+                // --- 1. USE BACKEND CALCULATIONS ---
+                if (response.data?.calculated) {
+                    setCalculatedInterest(response.data.calculated.totalInterestOwed);
+                    setCalculatedTotalOwed(response.data.calculated.amountDue); // Or totalOwed depending on display preference
+                }
+                // --- 2. USE BACKEND BREAKDOWN ---
+                if (response.data?.interestBreakdown) {
+                    setDisbursementDetails(response.data.interestBreakdown);
                 }
             } catch (err) {
-                 if (err.response?.status === 404) { setError("Loan not found."); } else { setError("An error occurred fetching data."); } console.error("Fetch Error:", err);
+                 if (err.response?.status === 404) { setError("Loan not found."); } 
+                 else { setError("An error occurred fetching data."); } 
+                 console.error("Fetch Error:", err);
             } finally { setIsLoading(false); }
         };
         fetchLoanData();
@@ -237,11 +193,13 @@ function LoanPage({ userRole }) {
     if (!loanData?.loanDetails) return <div className="alert alert-warning">Could not load complete loan details.</div>;
 
     const { loanDetails, transactions } = loanData;
-    // --- The 'transactions' array now contains 'changed_by_username' ---
     const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement') || [];
     const disbursementsMade = transactions?.filter(tx => tx.payment_type === 'disbursement') || [];
     const totalPaid = paymentsReceived.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
-    const currentBalance = calculatedTotalOwed - totalPaid;
+    
+    // Use backend values for main display
+    const currentBalance = loanData.calculated.amountDue; 
+    const calculatedTotalInterest = loanData.calculated.totalInterestOwed;
 
     const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const formatDate = (date) => new Date(date).toLocaleDateString('en-IN'); 
@@ -270,9 +228,9 @@ function LoanPage({ userRole }) {
                  </div>
             </div>
 
-            {/* --- (Rest of the file is unchanged) --- */}
             <div className="row g-4"> 
                 <div className="col-lg-8">
+                    {/* Customer Info */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Customer Information</div>
                          <div className="card-body d-flex align-items-center">
@@ -280,6 +238,8 @@ function LoanPage({ userRole }) {
                             <div><h5><Link to={`/customers/${loanDetails.customer_id}`}>{loanDetails.customer_name}</Link></h5><p className="mb-0 text-muted">Phone: {loanDetails.phone_number}</p></div>
                         </div>
                     </div>
+
+                    {/* Loan Summary */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Loan Summary</div>
                         <div className="card-body">
@@ -289,10 +249,12 @@ function LoanPage({ userRole }) {
                                <div className="col-md-6 mb-2"><strong>Principal:</strong> {formatCurrency(loanDetails.principal_amount)}</div>
                                <div className="col-md-6 mb-2"><strong>Interest Rate:</strong> {loanDetails.interest_rate}% p.m.</div>
                                <div className="col-md-6 mb-2"><strong>Pledge Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
-                               <div className="col-md-6 mb-2"><strong>Due Date:</strong> {formatDate(loanDetails.due_date)}</div>
+                               <div className="col-md-6 mb-2"><strong>Due Date:</strong> {loanDetails.closed_date ? formatDate(loanDetails.closed_date) + " (Closed)" : formatDate(loanDetails.due_date)}</div>
                            </div>
                         </div>
                     </div>
+
+                    {/* Pledged Item */}
                     <div className="card shadow-sm mb-4">
                          <div className="card-header">Pledged Item</div>
                          <div className="card-body d-flex align-items-start">
@@ -300,53 +262,57 @@ function LoanPage({ userRole }) {
                            <div><p className="mb-1"><strong>Description:</strong> {loanDetails.description} ({loanDetails.item_type})</p><p className="mb-0 text-muted"><strong>Quality:</strong> {loanDetails.quality || 'N/A'} | <strong>Weight:</strong> {loanDetails.weight ? `${loanDetails.weight}g` : 'N/A'}</p></div>
                         </div>
                     </div>
+
+                    {/* Amount Due / Summary Stats */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                         <div className="card shadow-sm mb-4 border-success">
                             <div className="card-header bg-success text-white">Amount Due Calculation (as of today)</div>
                             <div className="card-body">
                                 <dl className="row mb-0">
                                     <dt className="col-sm-5">Principal Amount:</dt><dd className="col-sm-7 text-end">{formatCurrency(loanDetails.principal_amount)}</dd>
-                                    <dt className="col-sm-5">Interest Accrued:</dt><dd className="col-sm-7 text-end">{formatCurrency(calculatedInterest)}</dd>
-                                    <dt className="col-sm-5 text-muted small pt-1">Calculation:</dt><dd className="col-sm-7 text-end text-muted small pt-1">{calculatedMonths} months @ {calculatedRate}% p.m.</dd>
-                                    <hr className='my-2'/><dt className="col-sm-5 fw-bold">Total Amount Due:</dt><dd className="col-sm-7 text-end fw-bold">{formatCurrency(calculatedTotalOwed)}</dd>
+                                    <dt className="col-sm-5">Total Interest Accrued:</dt><dd className="col-sm-7 text-end">{formatCurrency(calculatedTotalInterest)}</dd>
+                                    <hr className='my-2'/>
                                     <dt className="col-sm-5">Total Paid:</dt><dd className="col-sm-7 text-end">({formatCurrency(totalPaid)})</dd>
-                                    <hr className='my-2' style={{borderColor: '#6c757d'}}/><dt className="col-sm-5 fs-5">Current Balance:</dt><dd className="col-sm-7 text-end fs-5">{formatCurrency(currentBalance)}</dd>
+                                    <hr className='my-2' style={{borderColor: '#6c757d'}}/>
+                                    <dt className="col-sm-5 fs-5">Current Balance:</dt><dd className="col-sm-7 text-end fs-5">{formatCurrency(currentBalance)}</dd>
                                 </dl>
                             </div>
                         </div>
                     )}
 
-                    {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && disbursementDetails.length > 0 && (
+                    {/* Detailed Interest Breakdown (FROM BACKEND) */}
+                    {disbursementDetails.length > 0 && (
                         <div className="card shadow-sm mb-4 border-info">
                             <div className="card-header bg-info text-dark">Detailed Interest Breakdown</div>
                             <div className="card-body">
-                                <p className='small text-muted mb-2'>Interest is calculated separately for each principal disbursement from its effective start date using the loan rate of {calculatedRate}% p.m.</p>
+                                <p className='small text-muted mb-2'>
+                                    Calculated by the system based on {loanDetails.interest_rate}% p.m.
+                                </p>
                                 <table className="table table-sm table-bordered small mb-0">
                                     <thead className='table-light'>
                                         <tr>
-                                            <th>Source / Date</th>
-                                            <th className='text-end'>Principal Amount</th>
-                                            <th className='text-end'>Months Factor</th>
-                                            <th className='text-end'>Interest Accrued</th>
+                                            <th>Source</th>
+                                            <th className='text-end'>Amount</th>
+                                            <th className='text-end'>Date</th>
+                                            <th className='text-end'>Months</th>
+                                            <th className='text-end'>Interest</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {disbursementDetails.map((event, index) => (
                                             <tr key={index}>
-                                                <td>
-                                                    <strong>{event.label}</strong>
-                                                    <small className='d-block text-muted'>{formatDate(event.date)}</small>
-                                                </td>
+                                                <td><strong>{event.label}</strong></td>
                                                 <td className='text-end'>{formatCurrency(event.amount)}</td>
-                                                <td className='text-end'>{event.monthsFactor.toFixed(1)}</td>
-                                                <td className='text-end'>{formatCurrency(event.accruedInterest)}</td>
+                                                <td className='text-end'>{formatDate(event.date)}</td>
+                                                <td className='text-end'>{parseFloat(event.months).toFixed(2)}</td>
+                                                <td className='text-end'>{formatCurrency(event.interest)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                     <tfoot>
                                         <tr className="table-secondary">
-                                            <td colSpan="3" className='text-end fw-bold'>TOTAL INTEREST ACCRUED</td>
-                                            <td className='text-end fw-bold'>{formatCurrency(calculatedInterest)}</td>
+                                            <td colSpan="4" className='text-end fw-bold'>TOTAL INTEREST ACCRUED</td>
+                                            <td className='text-end fw-bold'>{formatCurrency(calculatedTotalInterest)}</td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -359,57 +325,41 @@ function LoanPage({ userRole }) {
                      {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-info shadow-sm mb-4"> <div className="card-header bg-info text-dark">Disburse More Principal</div> <div className="card-body"> <p className="text-muted small mb-2">Add funds to the existing loan principal.</p> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={additionalAmount} onChange={e => setAdditionalAmount(e.target.value)} placeholder="Amount (₹)"/> <button onClick={handleAddPrincipal} className="btn btn-primary btn-sm">Disburse</button> </div> </div> </div> )}
                      {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-warning shadow-sm mb-4"> <div className="card-header bg-warning text-dark">Payments & Settlement</div> <div className="card-body"> <div className="mb-4"><PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} /></div> <hr className="my-3"/> <div> <h6>Settle & Close Loan</h6> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="Discount (₹)"/> <button onClick={handleSettleAndClose} className="btn btn-success btn-sm">Settle</button> </div> <small className="text-muted d-block mt-1">Enter discount, if any. Balance must be ≤ 0 to close.</small> </div> </div> </div> )}
                     
-                    {/* --- ⭐ MODIFICATION: Transaction History Card --- */}
+                    {/* Transaction History */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Transaction History</div>
                         <div className="card-body">
                            <div className="row">
-                               <div className="col-6 border-end pe-2">
-                                   <h6>Payments Received</h6>
-                                   {paymentsReceived.length > 0 ? (
+                               <div className="col-12">
+                                   {transactions.length > 0 ? (
                                     <ul className="list-unstyled small mb-0">
-                                      {paymentsReceived.map(tx => (
-                                        <li key={tx.id} className="mb-2">
-                                          <div>{formatDate(tx.payment_date)}: <strong>{formatCurrency(tx.amount_paid)}</strong> ({tx.payment_type})</div>
-                                          {/* --- Show username if it exists --- */}
-                                          {tx.changed_by_username && (
-                                            <small className="text-muted">by: {tx.changed_by_username}</small>
-                                          )}
+                                      {transactions.map(tx => (
+                                        <li key={tx.id} className="mb-2 pb-2 border-bottom">
+                                          <div className="d-flex justify-content-between">
+                                              <strong>{formatDate(tx.payment_date)}</strong>
+                                              <span className={tx.payment_type === 'disbursement' ? 'text-danger' : 'text-success'}>
+                                                {tx.payment_type === 'disbursement' ? '+' : '-'}{formatCurrency(tx.amount_paid)}
+                                              </span>
+                                          </div>
+                                          <div className="text-muted">
+                                            {tx.payment_type.toUpperCase()}
+                                            {tx.changed_by_username && <span className="ms-2 fst-italic">- by {tx.changed_by_username}</span>}
+                                          </div>
                                         </li>
                                       ))}
                                     </ul>
                                    ) : (
-                                    <p className="text-muted small mb-0">No payments received.</p>
+                                    <p className="text-muted small mb-0">No transactions recorded.</p>
                                    )}
-                               </div>
-                               <div className="col-6 ps-2">
-                                   <h6>Disbursements</h6>
-                                    {disbursementsMade.length > 0 ? (
-                                      <ul className="list-unstyled small mb-0">
-                                        {disbursementsMade.map(tx => (
-                                          <li key={tx.id} className="mb-2">
-                                            <div>{formatDate(tx.payment_date)}: <strong>{formatCurrency(tx.amount_paid)}</strong></div>
-                                            {/* --- Show username if it exists --- */}
-                                            {tx.changed_by_username && (
-                                              <small className="text-muted">by: {tx.changed_by_username}</small>
-                                            )}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    ) : (
-                                      <p className="text-muted small mb-0">No additional disbursements.</p>
-                                    )}
                                </div>
                            </div>
                         </div>
                     </div>
-                    {/* --- END MODIFICATION --- */}
                 </div> 
             </div> 
 
             <div className="mt-3"><Link to={`/customers/${loanDetails.customer_id}`} className="btn btn-secondary btn-sm">Back to Customer Page</Link></div>
 
-            {/* Print Preview Modal (CLEANED) */}
             {showPrintModal && (
                  <div style={modalOverlayStyle}>
                     <div style={modalContentStyle}>
@@ -429,7 +379,6 @@ function LoanPage({ userRole }) {
                  </div>
             )}
 
-            {/* --- Render the history modal --- */}
             {showHistoryModal && (
                 <LoanHistoryModal loanId={id} onClose={() => setShowHistoryModal(false)} />
             )}
