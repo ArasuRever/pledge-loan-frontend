@@ -15,20 +15,18 @@ import LoginPage from './pages/LoginPage';
 import NewLoanWorkflowPage from './pages/NewLoanWorkflowPage';
 import EditLoanPage from './pages/EditLoanPage';
 import ManageStaffPage from './pages/ManageStaffPage';
-// --- NEW: Import Recycle Bin Page ---
 import RecycleBinPage from './pages/RecycleBinPage'; 
+// --- 1. NEW IMPORT ---
+import ReportsPage from './pages/ReportsPage';
 
-// --- Components ---
 import Navbar from './components/Navbar';
 
-// Helper function to set the authorization token for Axios requests
+// ... (setAuthToken helper remains the same) ...
 const setAuthToken = (token) => {
   if (token) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    console.log("Axios Auth header SET"); // Debug log
   } else {
     delete axios.defaults.headers.common['Authorization'];
-    console.log("Axios Auth header CLEARED"); // Debug log
   }
 };
 
@@ -39,16 +37,14 @@ function App() {
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
-    console.log("App mounted, checking token:", storedToken);
     if (storedToken) {
       setToken(storedToken);
       setAuthToken(storedToken);
       try {
-        const decodedUser = jwtDecode(storedToken); // { userId, username, role }
+        const decodedUser = jwtDecode(storedToken);
         setUser({ username: decodedUser.username, role: decodedUser.role });
       } catch (error) {
-        console.error("Invalid token:", error);
-        handleLogout(); // Clear bad token
+        handleLogout();
       }
     } else {
        setAuthToken(null);
@@ -57,66 +53,51 @@ function App() {
   }, []);
 
   const handleLoginSuccess = (newToken) => {
-    console.log("Login successful, setting token");
     localStorage.setItem('token', newToken);
     setToken(newToken);
     setAuthToken(newToken);
     try {
       const decodedUser = jwtDecode(newToken);
-      console.log("FRONTEND: Decoded token object:", decodedUser); 
       setUser({ username: decodedUser.username, role: decodedUser.role });
     } catch (error) {
-      console.error("Error decoding new token:", error);
+      console.error("Error decoding token", error);
     }
   };
 
   const handleLogout = () => {
-    console.log("Logout triggered");
     localStorage.removeItem('token');
     setToken(null);
     setAuthToken(null);
     setUser(null); 
   };
 
-  if (isInitializing) {
-    return <div className="container mt-5 text-center"><h5>Loading application...</h5></div>;
-  }
+  if (isInitializing) return <div className="container mt-5 text-center"><h5>Loading...</h5></div>;
 
   const ProtectedRoute = ({ children }) => {
-    if (!token) {
-      return <Navigate to="/login" replace />;
-    }
+    if (!token) return <Navigate to="/login" replace />;
     return children;
   };
 
   return (
     <Router>
       {token && <Navbar user={user} onLogout={handleLogout} />}
-
       <div className="container mt-4">
         <Routes>
-          <Route
-            path="/login"
-            element={!token ? <LoginPage onLoginSuccess={handleLoginSuccess} /> : <Navigate to="/" replace />}
-          />
+          <Route path="/login" element={!token ? <LoginPage onLoginSuccess={handleLoginSuccess} /> : <Navigate to="/" replace />} />
 
-          {/* --- Pass user.role to the pages that need it --- */}
           <Route path="/" element={<ProtectedRoute><HomePage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/customers" element={<ProtectedRoute><CustomersPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans" element={<ProtectedRoute><AllLoansPage /></ProtectedRoute>} />
           <Route path="/overdue" element={<ProtectedRoute><OverdueLoansPage /></ProtectedRoute>} />
           <Route path="/new-loan" element={<ProtectedRoute><NewLoanWorkflowPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/manage-staff" element={<ProtectedRoute><ManageStaffPage userRole={user?.role} /></ProtectedRoute>} />
-          
-          {/* --- ***THIS IS THE FIX*** --- */}
-          {/* --- Pass userRole to CustomerPage and LoanPage --- */}
           <Route path="/customers/:id" element={<ProtectedRoute><CustomerPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans/:id" element={<ProtectedRoute><LoanPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans/:id/edit" element={<ProtectedRoute><EditLoanPage /></ProtectedRoute>} />
-          
-          {/* --- Add Recycle Bin Route --- */}
           <Route path="/recycle-bin" element={<ProtectedRoute><RecycleBinPage userRole={user?.role} /></ProtectedRoute>} />
-
+          
+          {/* --- 2. NEW ROUTE --- */}
+          <Route path="/reports" element={<ProtectedRoute><ReportsPage userRole={user?.role} /></ProtectedRoute>} />
 
            <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
         </Routes>
