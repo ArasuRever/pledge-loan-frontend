@@ -1,391 +1,562 @@
-// src/pages/LoanPage.js
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useReactToPrint } from 'react-to-print';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-import PaymentForm from '../components/PaymentForm';
-import { PrintableInvoice } from '../components/PrintableInvoice';
-import LoanHistoryModal from '../components/LoanHistoryModal';
+import { format, parseISO } from 'date-fns';
+import useAuth from '../hooks/useAuth'; // Assuming you have a useAuth hook for user role
 
-const API_URL = process.env.REACT_APP_API_URL; 
+const API_URL = process.env.REACT_APP_API_URL;
 
-// --- Modal Styles ---
-const modalOverlayStyle = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  width: '100%',
-  height: '100%',
-  backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  zIndex: 1050,
-};
-const modalContentStyle = {
-  backgroundColor: 'white',
-  padding: '20px',
-  borderRadius: '8px',
-  width: '80%',
-  maxWidth: '800px',
-  maxHeight: '85vh',
-  overflowY: 'auto',
-  border: '1px solid #ccc',
-  boxShadow: '0 5px 15px rgba(0, 0, 0, 0.2)',
-};
-const modalHeaderStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  borderBottom: '1px solid #eee',
-  paddingBottom: '10px',
-  marginBottom: '15px',
-};
-const modalBodyStyle = { marginBottom: '20px' };
-const modalFooterStyle = {
-  borderTop: '1px solid #eee',
-  paddingTop: '15px',
-  textAlign: 'right',
-};
-const hiddenPrintComponentStyle = {
-    position: 'absolute',
-    overflow: 'hidden',
-    clip: 'rect(0 0 0 0)',
-    height: '1px',
-    width: '1px',
-    margin: '-1px',
-    padding: '0',
-    border: '0',
-    top: '-9999px',
-    left: '-9999px',
-};
-// --- End Modal Styles ---
-
-function LoanPage({ userRole }) {
-    const { id } = useParams();
-    
-    // --- State variables ---
-    const [loanData, setLoanData] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+// Components (Assuming you have these in a separate file or inline)
+const AddPaymentModal = ({ loanId, customerId, fetchLoanData, show, handleClose }) => {
+    const [amount, setAmount] = useState('');
+    const [paymentType, setPaymentType] = useState('interest');
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [discount, setDiscount] = useState('');
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [showPrintModal, setShowPrintModal] = useState(false);
-    const [showHistoryModal, setShowHistoryModal] = useState(false); 
-    const [additionalAmount, setAdditionalAmount] = useState('');
-    
-    // --- New State for Backend Calculated Values ---
-    const [calculatedInterest, setCalculatedInterest] = useState(0);
-    const [calculatedTotalOwed, setCalculatedTotalOwed] = useState(0);
-    const [disbursementDetails, setDisbursementDetails] = useState([]); 
 
-    // --- Ref ---
-    const invoiceRef = useRef();
-    const navigate = useNavigate();
-
-    // --- Handlers (Unchanged logic, just calling APIs) ---
-    const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false), onPrintError: (err) => { console.error("Print Error:", err); alert("Printing failed."); setShowPrintModal(false); } });
-    
-    const handleSavePdf = async () => { 
-        if (!invoiceRef.current) return;
-        const elementToCapture = invoiceRef.current; 
-        const parentDiv = elementToCapture.parentNode; 
-        let originalParentStyle = {};
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
         try {
-            originalParentStyle = { ...parentDiv.style };
-            Object.assign(parentDiv.style, { position: 'absolute', top: '0', left: '0', visibility: 'visible', height: 'auto', width: 'auto', overflow: 'visible', clip: 'auto', margin: '0', padding: '0', border: 'none', whiteSpace: 'normal', backgroundColor: '#ffffff' });
-            await new Promise(resolve => setTimeout(resolve, 150));
-            const canvas = await html2canvas(elementToCapture, { scale: 2, useCORS: true, logging: true, backgroundColor: '#ffffff', width: elementToCapture.scrollWidth, height: elementToCapture.scrollHeight });
-            Object.assign(parentDiv.style, originalParentStyle);
-            const imgData = canvas.toDataURL('image/png'); 
-            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' }); 
-            const imgProps=pdf.getImageProperties(imgData);
-            const pdfMargin=10;
-            const pdfWidth=pdf.internal.pageSize.getWidth()-2*pdfMargin;
-            const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;
-            let heightLeft=pdfHeight;
-            let position=pdfMargin;
-            pdf.addImage(imgData,'PNG',pdfMargin,position,pdfWidth,pdfHeight);
-            pdf.save(`Loan-Invoice-${id}.pdf`); 
-            setShowPrintModal(false);
-        } catch (err) { 
-            console.error("PDF Generation Error:", err); 
-            alert("PDF Generation Failed."); 
-            if (parentDiv) Object.assign(parentDiv.style, originalParentStyle); 
-            setShowPrintModal(false); 
-        }
-    };
-
-    const handleSettleAndClose = async () => { 
-        const discountValue = parseFloat(discount) || 0;
-        if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}. Proceed?`)) {
-            try { 
-                // Note: You might want to add a field for 'settlementAmount' in the UI later if needed
-                // For now, assuming full payment of remaining balance - discount
-                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue, settlementAmount: 0 }); 
-                alert(response.data.message); setRefreshTrigger(t => t + 1); 
-            }
-            catch (err) { 
-                if (err.response?.data?.error) { alert(err.response.data.error); } 
-                else { console.error("Settle Error:", err); alert('Settle failed.'); } 
-            }
-        }
-    };
-
-    const handleAddPrincipal = async () => { 
-        const amountValue = parseFloat(additionalAmount);
-        if (!amountValue || amountValue <= 0) { alert('Please enter a valid positive amount.'); return; }
-        if (window.confirm(`Add ₹${amountValue.toFixed(2)} to the principal?`)) {
-            try { 
-                const response = await axios.post(`${API_URL}/api/loans/${id}/add-principal`, { additionalAmount: amountValue }); 
-                alert(response.data.message); setAdditionalAmount(''); setRefreshTrigger(t => t + 1); 
-            }
-            catch (err) { if (err.response?.data?.error) { alert(`Error: ${err.response.data.error}`); } else { console.error("Add Principal Error:", err); alert('Add principal failed.'); } }
-        }
-    };
-
-    const handleDeleteLoan = async () => { 
-      if (window.confirm("Are you sure? This will move the loan to the recycle bin. This can only be done for 'Paid' or 'Forfeited' loans.")) {
-        try {
-          const response = await axios.delete(`${API_URL}/api/loans/${id}`);
-          alert(response.data.message);
-          navigate(`/customers/${loanData.loanDetails.customer_id}`); 
+            await axios.post(`${API_URL}/api/transactions`, {
+                loan_id: loanId,
+                amount_paid: amount,
+                payment_type: paymentType,
+            });
+            alert('Payment added successfully.');
+            setAmount('');
+            setPaymentType('interest');
+            fetchLoanData();
+            handleClose();
         } catch (err) {
-          console.error("Delete Loan Error:", err);
-          alert("Failed to delete loan.");
+            setError(err.response?.data?.error || 'Failed to add payment.');
+        } finally {
+            setLoading(false);
         }
-      }
     };
-    // --- End Handlers ---
 
-    // Fetch Loan Data
-    useEffect(() => {
-        const fetchLoanData = async () => {
-            setIsLoading(true); setError(null);
-            setDisbursementDetails([]); 
-            try {
-                const response = await axios.get(`${API_URL}/api/loans/${id}`);
-                setLoanData(response.data);
-                
-                // --- 1. USE BACKEND CALCULATIONS ---
-                if (response.data?.calculated) {
-                    setCalculatedInterest(response.data.calculated.totalInterestOwed);
-                    setCalculatedTotalOwed(response.data.calculated.amountDue); // Or totalOwed depending on display preference
-                }
-                // --- 2. USE BACKEND BREAKDOWN ---
-                if (response.data?.interestBreakdown) {
-                    setDisbursementDetails(response.data.interestBreakdown);
-                }
-            } catch (err) {
-                 if (err.response?.status === 404) { setError("Loan not found."); } 
-                 else { setError("An error occurred fetching data."); } 
-                 console.error("Fetch Error:", err);
-            } finally { setIsLoading(false); }
-        };
-        fetchLoanData();
-    }, [id, refreshTrigger]);
-
-    // Render Logic
-    if (isLoading) return <div className="text-center mt-5">Loading loan details...</div>;
-    if (error) return <div className="alert alert-danger"><p>{error}</p><Link to="/">Go Home</Link></div>;
-    if (!loanData?.loanDetails) return <div className="alert alert-warning">Could not load complete loan details.</div>;
-
-    const { loanDetails, transactions } = loanData;
-    const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement') || [];
-    const disbursementsMade = transactions?.filter(tx => tx.payment_type === 'disbursement') || [];
-    const totalPaid = paymentsReceived.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
-    
-    // Use backend values for main display
-    const currentBalance = loanData.calculated.amountDue; 
-    const calculatedTotalInterest = loanData.calculated.totalInterestOwed;
-
-    const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const formatDate = (date) => new Date(date).toLocaleDateString('en-IN'); 
-    const isDeletable = loanDetails.status === 'paid' || loanDetails.status === 'forfeited';
+    if (!show) return null;
 
     return (
-        <div>
-            {/* Page Header */}
-             <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
-                 <h2>Loan Details (ID: {loanDetails.id})</h2>
-                 <div>
-                    <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => setShowHistoryModal(true)}>
-                         View History
-                    </button>
-                    <Link to={`/loans/${id}/edit`} className="btn btn-warning btn-sm me-2">
-                         Edit Loan
-                    </Link>
-                    <button className="btn btn-info btn-sm" onClick={() => setShowPrintModal(true)}>
-                        Print / Save Invoice
-                    </button>
-                    {userRole === 'admin' && isDeletable && (
-                        <button className="btn btn-danger btn-sm ms-2" onClick={handleDeleteLoan}>
-                            <i className="bi bi-trash me-1"></i> Delete
-                        </button>
+        <div className="modal show d-block" tabIndex="-1">
+            <div className="modal-dialog">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">Add New Payment</h5>
+                        <button type="button" className="btn-close" onClick={handleClose}></button>
+                    </div>
+                    <div className="modal-body">
+                        {error && <div className="alert alert-danger">{error}</div>}
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-3">
+                                <label className="form-label">Amount</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="form-control"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label">Payment Type</label>
+                                <select
+                                    className="form-select"
+                                    value={paymentType}
+                                    onChange={(e) => setPaymentType(e.target.value)}
+                                >
+                                    <option value="interest">Interest</option>
+                                    <option value="principal">Principal</option>
+                                </select>
+                            </div>
+                            <button type="submit" className="btn btn-primary" disabled={loading}>
+                                {loading ? 'Saving...' : 'Record Payment'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AddPrincipalModal = ({ loanId, fetchLoanData, show, handleClose }) => {
+    const [amount, setAmount] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        try {
+            await axios.post(`${API_URL}/api/loans/${loanId}/add-principal`, {
+                additionalAmount: amount,
+            });
+            alert('Principal added successfully.');
+            setAmount('');
+            fetchLoanData();
+            handleClose();
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to add principal.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!show) return null;
+
+    return (
+        <div className="modal show d-block" tabIndex="-1">
+            <div className="modal-dialog">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">Add Principal / Top-up</h5>
+                        <button type="button" className="btn-close" onClick={handleClose}></button>
+                    </div>
+                    <div className="modal-body">
+                        {error && <div className="alert alert-danger">{error}</div>}
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-3">
+                                <label className="form-label">Additional Principal Amount</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="form-control"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <button type="submit" className="btn btn-primary" disabled={loading}>
+                                {loading ? 'Saving...' : 'Add Principal'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const EditLoanModal = ({ loan, fetchLoanData, show, handleClose }) => {
+    const [data, setData] = useState({});
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (loan) {
+            // Populate form with existing data, format date for input type="date"
+            setData({
+                principalAmount: loan.principal_amount || '',
+                interestRate: loan.interest_rate || '',
+                loanPeriod: loan.loan_period || '',
+                dueDate: loan.due_date ? format(parseISO(loan.due_date), 'yyyy-MM-dd') : '',
+                itemDescription: loan.item_description || '',
+            });
+        }
+    }, [loan]);
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        try {
+            // Prepare data for API, converting numbers back to strings if necessary
+            const updateData = {
+                principal_amount: data.principalAmount,
+                interest_rate: data.interestRate,
+                loan_period: data.loanPeriod,
+                due_date: data.dueDate,
+                item_description: data.itemDescription,
+            };
+
+            await axios.put(`${API_URL}/api/loans/${loan.id}`, updateData);
+            alert('Loan details updated successfully.');
+            fetchLoanData();
+            handleClose();
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to update loan details.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!show || !loan) return null;
+
+    return (
+        <div className="modal show d-block" tabIndex="-1">
+            <div className="modal-dialog">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">Edit Loan #{loan.book_loan_number}</h5>
+                        <button type="button" className="btn-close" onClick={handleClose}></button>
+                    </div>
+                    <div className="modal-body">
+                        {error && <div className="alert alert-danger">{error}</div>}
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-3">
+                                <label className="form-label">Principal Amount (₹)</label>
+                                <input type="number" step="0.01" className="form-control" name="principalAmount" value={data.principalAmount} onChange={handleChange} required />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label">Interest Rate (%)</label>
+                                <input type="number" step="0.01" className="form-control" name="interestRate" value={data.interestRate} onChange={handleChange} required />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label">Loan Period (Days)</label>
+                                <input type="number" className="form-control" name="loanPeriod" value={data.loanPeriod} onChange={handleChange} required />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label">Due Date</label>
+                                <input type="date" className="form-control" name="dueDate" value={data.dueDate} onChange={handleChange} required />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label">Pledged Item Description</label>
+                                <textarea className="form-control" name="itemDescription" value={data.itemDescription} onChange={handleChange} required />
+                            </div>
+                            <button type="submit" className="btn btn-primary" disabled={loading}>
+                                {loading ? 'Saving...' : 'Update Loan'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SettleLoanModal = ({ loanId, customerId, fetchLoanData, show, handleClose, balance, currentInterest }) => {
+    const [discountAmount, setDiscountAmount] = useState('0');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const totalDue = parseFloat(balance) + parseFloat(currentInterest);
+    const finalSettlementAmount = (totalDue - parseFloat(discountAmount || 0)).toFixed(2);
+    
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!window.confirm(`Confirm settlement: Loan #${loanId} will be marked as PAID with a final amount of ₹${finalSettlementAmount}. Principal balance and all outstanding interest will be zeroed out. Continue?`)) {
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+            await axios.post(`${API_URL}/api/loans/${loanId}/settle`, {
+                discountAmount: discountAmount || '0',
+                settlementAmount: finalSettlementAmount.toString(), // The required final settlement amount
+            });
+            alert(`Loan settled successfully! Final amount: ₹${finalSettlementAmount}`);
+            fetchLoanData();
+            handleClose();
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to settle loan.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!show) return null;
+
+    return (
+        <div className="modal show d-block" tabIndex="-1">
+            <div className="modal-dialog">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">Settle Loan</h5>
+                        <button type="button" className="btn-close" onClick={handleClose}></button>
+                    </div>
+                    <div className="modal-body">
+                        {error && <div className="alert alert-danger">{error}</div>}
+                        <p><strong>Principal Balance:</strong> ₹{parseFloat(balance).toFixed(2)}</p>
+                        <p><strong>Outstanding Interest:</strong> ₹{parseFloat(currentInterest).toFixed(2)}</p>
+                        <p><strong>Total Amount Due:</strong> ₹{totalDue.toFixed(2)}</p>
+                        <hr/>
+
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-3">
+                                <label className="form-label">Discount Amount (Optional)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="form-control"
+                                    value={discountAmount}
+                                    onChange={(e) => setDiscountAmount(e.target.value)}
+                                    min="0"
+                                    max={totalDue}
+                                />
+                                <small className="form-text text-muted">Amount to be waived from the total due.</small>
+                            </div>
+                            <div className="alert alert-info">
+                                <strong>Final Settlement Amount:</strong> ₹{finalSettlementAmount}
+                            </div>
+                            <button type="submit" className="btn btn-success" disabled={loading}>
+                                {loading ? 'Processing...' : 'Settle Loan as PAID'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Main Component ---
+function LoanPage() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const { userRole } = useAuth(); // Get user role from context
+    
+    const [loan, setLoan] = useState(null);
+    const [history, setHistory] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [message, setMessage] = useState(null);
+
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showPrincipalModal, setShowPrincipalModal] = useState(false);
+    const [showSettleModal, setShowSettleModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+
+    // Fetch loan details and history
+    const fetchLoanData = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const [loanResponse, historyResponse] = await Promise.all([
+                axios.get(`${API_URL}/api/loans/${id}`),
+                axios.get(`${API_URL}/api/loans/${id}/history`)
+            ]);
+            setLoan(loanResponse.data);
+            setHistory(historyResponse.data);
+        } catch (err) {
+            setError(err.response?.data?.error || "Failed to load loan data.");
+        } finally {
+            setIsLoading(false);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        fetchLoanData();
+    }, [fetchLoanData]);
+
+    const formatCurrency = (amount) => {
+        return `₹${parseFloat(amount || 0).toFixed(2)}`;
+    };
+
+    const getStatusBadge = (status) => {
+        let colorClass = 'bg-secondary';
+        if (status === 'active') colorClass = 'bg-primary';
+        else if (status === 'overdue') colorClass = 'bg-danger';
+        else if (status === 'paid') colorClass = 'bg-success';
+        else if (status === 'forfeited') colorClass = 'bg-warning text-dark';
+        return <span className={`badge ${colorClass}`}>{status.toUpperCase()}</span>;
+    };
+
+    // --- Action Handlers ---
+
+    const handleSoftDelete = async () => {
+        if (loan.status === 'deleted') return; // Should not happen if page is guarded
+        if (!window.confirm(`⚠️ WARNING: Are you sure you want to soft-delete Loan #${loan.book_loan_number}? It will be moved to the Recycle Bin and marked as 'deleted'.`)) {
+            return;
+        }
+        try {
+            const response = await axios.delete(`${API_URL}/api/loans/${id}`);
+            setMessage(response.data.message || `Loan #${loan.book_loan_number} successfully soft-deleted.`);
+            // Update UI to reflect deletion, or simply refresh
+            fetchLoanData(); 
+            navigate('/loans'); // Redirect to loans list after deletion
+        } catch (err) {
+            setError(err.response?.data?.error || "Failed to soft-delete loan.");
+        }
+    };
+    
+    // --- UI Rendering ---
+
+    if (isLoading) return <div className="text-center mt-5">Loading Loan Details...</div>;
+    if (error) return <div className="alert alert-danger m-4">Error: {error}</div>;
+    if (!loan) return <div className="alert alert-warning m-4">Loan not found.</div>;
+
+    const isActionable = loan.status === 'active' || loan.status === 'overdue';
+
+    return (
+        <div className="container-fluid py-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h2>Loan Details: #{loan.book_loan_number}</h2>
+                <div>
+                    {isActionable && (
+                        <>
+                            <button className="btn btn-sm btn-info me-2" onClick={() => setShowEditModal(true)}>
+                                <i className="bi bi-pencil-square"></i> Edit Loan
+                            </button>
+                            {userRole === 'admin' && (
+                                <button className="btn btn-sm btn-danger" onClick={handleSoftDelete}>
+                                    <i className="bi bi-trash"></i> Soft Delete
+                                </button>
+                            )}
+                        </>
                     )}
-                 </div>
+                </div>
             </div>
 
-            <div className="row g-4"> 
+            {message && <div className="alert alert-success">{message}</div>}
+
+            <div className="row">
+                {/* --- Main Details Card --- */}
                 <div className="col-lg-8">
-                    {/* Customer Info */}
                     <div className="card shadow-sm mb-4">
-                        <div className="card-header">Customer Information</div>
-                         <div className="card-body d-flex align-items-center">
-                            {loanDetails.customer_image_url && <img src={loanDetails.customer_image_url} alt={loanDetails.customer_name} style={{ width: '60px', height: '60px', borderRadius: '50%', marginRight: '15px', objectFit: 'cover' }} />}
-                            <div><h5><Link to={`/customers/${loanDetails.customer_id}`}>{loanDetails.customer_name}</Link></h5><p className="mb-0 text-muted">Phone: {loanDetails.phone_number}</p></div>
+                        <div className="card-header bg-primary text-white">
+                            <h5 className="mb-0">Summary & Status</h5>
                         </div>
-                    </div>
-
-                    {/* Loan Summary */}
-                    <div className="card shadow-sm mb-4">
-                        <div className="card-header">Loan Summary</div>
                         <div className="card-body">
-                           <div className="row">
-                               <div className="col-md-6 mb-2"><strong>Book Loan #:</strong> {loanDetails.book_loan_number}</div>
-                               <div className="col-md-6 mb-2"><strong>Status:</strong> <span className={`badge bg-${loanDetails.status === 'overdue' ? 'danger' : loanDetails.status === 'paid' ? 'secondary' : 'success'}`}>{loanDetails.status}</span></div>
-                               <div className="col-md-6 mb-2"><strong>Principal:</strong> {formatCurrency(loanDetails.principal_amount)}</div>
-                               <div className="col-md-6 mb-2"><strong>Interest Rate:</strong> {loanDetails.interest_rate}% p.m.</div>
-                               <div className="col-md-6 mb-2"><strong>Pledge Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
-                               <div className="col-md-6 mb-2"><strong>Due Date:</strong> {loanDetails.closed_date ? formatDate(loanDetails.closed_date) + " (Closed)" : formatDate(loanDetails.due_date)}</div>
-                           </div>
-                        </div>
-                    </div>
-
-                    {/* Pledged Item */}
-                    <div className="card shadow-sm mb-4">
-                         <div className="card-header">Pledged Item</div>
-                         <div className="card-body d-flex align-items-start">
-                           {loanDetails.item_image_data_url && <img src={loanDetails.item_image_data_url} alt={loanDetails.description} style={{ maxWidth: '80px', maxHeight: '80px', marginRight: '15px', display: 'block', border: '1px solid #ddd', padding: '2px', borderRadius: '4px' }} />}
-                           <div><p className="mb-1"><strong>Description:</strong> {loanDetails.description} ({loanDetails.item_type})</p><p className="mb-0 text-muted"><strong>Quality:</strong> {loanDetails.quality || 'N/A'} | <strong>Weight:</strong> {loanDetails.weight ? `${loanDetails.weight}g` : 'N/A'}</p></div>
-                        </div>
-                    </div>
-
-                    {/* Amount Due / Summary Stats */}
-                    {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
-                        <div className="card shadow-sm mb-4 border-success">
-                            <div className="card-header bg-success text-white">Amount Due Calculation (as of today)</div>
-                            <div className="card-body">
-                                <dl className="row mb-0">
-                                    <dt className="col-sm-5">Principal Amount:</dt><dd className="col-sm-7 text-end">{formatCurrency(loanDetails.principal_amount)}</dd>
-                                    <dt className="col-sm-5">Total Interest Accrued:</dt><dd className="col-sm-7 text-end">{formatCurrency(calculatedTotalInterest)}</dd>
-                                    <hr className='my-2'/>
-                                    <dt className="col-sm-5">Total Paid:</dt><dd className="col-sm-7 text-end">({formatCurrency(totalPaid)})</dd>
-                                    <hr className='my-2' style={{borderColor: '#6c757d'}}/>
-                                    <dt className="col-sm-5 fs-5">Current Balance:</dt><dd className="col-sm-7 text-end fs-5">{formatCurrency(currentBalance)}</dd>
-                                </dl>
+                            <div className="row">
+                                <div className="col-md-6">
+                                    <p><strong>Customer:</strong> <a href={`/customers/${loan.customer_id}`}>{loan.customer_name}</a></p>
+                                    <p><strong>Disbursed Principal:</strong> {formatCurrency(loan.principal_amount)}</p>
+                                    <p><strong>Loan Date:</strong> {format(parseISO(loan.loan_date), 'dd-MMM-yyyy')}</p>
+                                    <p><strong>Due Date:</strong> {format(parseISO(loan.due_date), 'dd-MMM-yyyy')}</p>
+                                    <p><strong>Loan Status:</strong> {getStatusBadge(loan.status)}</p>
+                                </div>
+                                <div className="col-md-6">
+                                    <p><strong>Interest Rate:</strong> {loan.interest_rate}% per {loan.loan_period} days</p>
+                                    <p><strong>Outstanding Balance:</strong> {formatCurrency(loan.remaining_principal)}</p>
+                                    <p><strong>Current Interest Due:</strong> {formatCurrency(loan.current_interest_due)}</p>
+                                    <p><strong>Total Interest Paid:</strong> {formatCurrency(loan.total_interest_paid)}</p>
+                                </div>
                             </div>
                         </div>
-                    )}
+                    </div>
 
-                    {/* Detailed Interest Breakdown (FROM BACKEND) */}
-                    {disbursementDetails.length > 0 && (
-                        <div className="card shadow-sm mb-4 border-info">
-                            <div className="card-header bg-info text-dark">Detailed Interest Breakdown</div>
-                            <div className="card-body">
-                                <p className='small text-muted mb-2'>
-                                    Calculated by the system based on {loanDetails.interest_rate}% p.m.
-                                </p>
-                                <table className="table table-sm table-bordered small mb-0">
-                                    <thead className='table-light'>
+                    {/* --- Pledged Item Card --- */}
+                    <div className="card shadow-sm mb-4">
+                        <div className="card-header bg-secondary text-white">
+                            <h5 className="mb-0">Pledged Item</h5>
+                        </div>
+                        <div className="card-body">
+                            <p><strong>Description:</strong> {loan.item_description}</p>
+                            {loan.item_photo_url && (
+                                <div className="mt-3">
+                                    <strong>Pledged Photo:</strong>
+                                    <img 
+                                        src={loan.item_photo_url} 
+                                        alt="Pledged Item" 
+                                        className="img-fluid rounded mt-2" 
+                                        style={{ maxWidth: '300px', maxHeight: '300px', objectFit: 'cover' }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* --- Actions Card (Right Column) --- */}
+                <div className="col-lg-4">
+                    <div className="card shadow-sm mb-4 bg-light">
+                        <div className="card-header bg-dark text-white">
+                            <h5 className="mb-0">Actions</h5>
+                        </div>
+                        <div className="card-body">
+                            <div className="d-grid gap-2">
+                                {isActionable ? (
+                                    <>
+                                        <button className="btn btn-success btn-lg" onClick={() => setShowPaymentModal(true)}>
+                                            <i className="bi bi-wallet"></i> Add Payment
+                                        </button>
+                                        <button className="btn btn-warning btn-lg" onClick={() => setShowPrincipalModal(true)}>
+                                            <i className="bi bi-plus-circle"></i> Add Principal/Top-up
+                                        </button>
+                                        <button className="btn btn-primary btn-lg" onClick={() => setShowSettleModal(true)}>
+                                            <i className="bi bi-check-circle"></i> Settle Loan
+                                        </button>
+                                    </>
+                                ) : (
+                                    <div className="alert alert-info text-center">
+                                        This loan is **{loan.status.toUpperCase()}**. No further actions available.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* --- History Table --- */}
+            <div className="row mt-4">
+                <div className="col-12">
+                    <div className="card shadow-sm">
+                        <div className="card-header bg-info text-white">
+                            <h5 className="mb-0">Loan History / Transactions</h5>
+                        </div>
+                        <div className="card-body">
+                            <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                <table className="table table-striped table-hover">
+                                    <thead>
                                         <tr>
-                                            <th>Source</th>
-                                            <th className='text-end'>Amount</th>
-                                            <th className='text-end'>Date</th>
-                                            <th className='text-end'>Months</th>
-                                            <th className='text-end'>Interest</th>
+                                            <th>Date</th>
+                                            <th>Type</th>
+                                            <th>Description</th>
+                                            <th>Amount (₹)</th>
+                                            <th>Balance After (₹)</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {disbursementDetails.map((event, index) => (
-                                            <tr key={index}>
-                                                <td><strong>{event.label}</strong></td>
-                                                <td className='text-end'>{formatCurrency(event.amount)}</td>
-                                                <td className='text-end'>{formatDate(event.date)}</td>
-                                                <td className='text-end'>{parseFloat(event.months).toFixed(2)}</td>
-                                                <td className='text-end'>{formatCurrency(event.interest)}</td>
-                                            </tr>
-                                        ))}
+                                        {history.length > 0 ? (
+                                            history.map((item, index) => (
+                                                <tr key={index}>
+                                                    <td>{format(parseISO(item.timestamp), 'dd-MMM-yyyy HH:mm')}</td>
+                                                    <td><span className={`badge ${item.type === 'Transaction' ? 'bg-success' : item.type === 'Action' ? 'bg-primary' : 'bg-secondary'}`}>{item.type.toUpperCase()}</span></td>
+                                                    <td>{item.description}</td>
+                                                    <td>{item.amount_change ? formatCurrency(item.amount_change) : '-'}</td>
+                                                    <td>{item.new_principal_balance ? formatCurrency(item.new_principal_balance) : '-'}</td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr><td colSpan="5" className="text-center">No history recorded for this loan.</td></tr>
+                                        )}
                                     </tbody>
-                                    <tfoot>
-                                        <tr className="table-secondary">
-                                            <td colSpan="4" className='text-end fw-bold'>TOTAL INTEREST ACCRUED</td>
-                                            <td className='text-end fw-bold'>{formatCurrency(calculatedTotalInterest)}</td>
-                                        </tr>
-                                    </tfoot>
                                 </table>
                             </div>
                         </div>
-                    )}
-                </div> 
-
-                <div className="col-lg-4">
-                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-info shadow-sm mb-4"> <div className="card-header bg-info text-dark">Disburse More Principal</div> <div className="card-body"> <p className="text-muted small mb-2">Add funds to the existing loan principal.</p> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={additionalAmount} onChange={e => setAdditionalAmount(e.target.value)} placeholder="Amount (₹)"/> <button onClick={handleAddPrincipal} className="btn btn-primary btn-sm">Disburse</button> </div> </div> </div> )}
-                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( <div className="card border-warning shadow-sm mb-4"> <div className="card-header bg-warning text-dark">Payments & Settlement</div> <div className="card-body"> <div className="mb-4"><PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} /></div> <hr className="my-3"/> <div> <h6>Settle & Close Loan</h6> <div className="d-flex"> <input type="number" step="0.01" className="form-control form-control-sm me-2" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="Discount (₹)"/> <button onClick={handleSettleAndClose} className="btn btn-success btn-sm">Settle</button> </div> <small className="text-muted d-block mt-1">Enter discount, if any. Balance must be ≤ 0 to close.</small> </div> </div> </div> )}
-                    
-                    {/* Transaction History */}
-                    <div className="card shadow-sm mb-4">
-                        <div className="card-header">Transaction History</div>
-                        <div className="card-body">
-                           <div className="row">
-                               <div className="col-12">
-                                   {transactions.length > 0 ? (
-                                    <ul className="list-unstyled small mb-0">
-                                      {transactions.map(tx => (
-                                        <li key={tx.id} className="mb-2 pb-2 border-bottom">
-                                          <div className="d-flex justify-content-between">
-                                              <strong>{formatDate(tx.payment_date)}</strong>
-                                              <span className={tx.payment_type === 'disbursement' ? 'text-danger' : 'text-success'}>
-                                                {tx.payment_type === 'disbursement' ? '+' : '-'}{formatCurrency(tx.amount_paid)}
-                                              </span>
-                                          </div>
-                                          <div className="text-muted">
-                                            {tx.payment_type.toUpperCase()}
-                                            {tx.changed_by_username && <span className="ms-2 fst-italic">- by {tx.changed_by_username}</span>}
-                                          </div>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                   ) : (
-                                    <p className="text-muted small mb-0">No transactions recorded.</p>
-                                   )}
-                               </div>
-                           </div>
-                        </div>
                     </div>
-                </div> 
-            </div> 
-
-            <div className="mt-3"><Link to={`/customers/${loanDetails.customer_id}`} className="btn btn-secondary btn-sm">Back to Customer Page</Link></div>
-
-            {showPrintModal && (
-                 <div style={modalOverlayStyle}>
-                    <div style={modalContentStyle}>
-                        <div style={modalHeaderStyle}>
-                             <h5 className="modal-title">Invoice Preview (Loan #{id})</h5>
-                             <button type="button" className="btn-close" onClick={() => setShowPrintModal(false)} aria-label="Close"></button>
-                        </div>
-                        <div style={modalBodyStyle}>
-                            {loanDetails && <PrintableInvoice loanDetails={loanDetails} />}
-                        </div>
-                        <div style={modalFooterStyle}>
-                            <button type="button" className="btn btn-secondary me-2" onClick={() => setShowPrintModal(false)}>Close</button>
-                            <button type="button" className="btn btn-success me-2" onClick={handleSavePdf}>Save as PDF</button>
-                            <button type="button" className="btn btn-primary" onClick={handleReactPrint}>Print</button>
-                        </div>
-                    </div>
-                 </div>
-            )}
-
-            {showHistoryModal && (
-                <LoanHistoryModal loanId={id} onClose={() => setShowHistoryModal(false)} />
-            )}
-
-            <div style={hiddenPrintComponentStyle}>
-                {loanDetails && <PrintableInvoice ref={invoiceRef} loanDetails={loanDetails} />}
+                </div>
             </div>
+
+            {/* --- Modals --- */}
+            <AddPaymentModal
+                loanId={loan.id}
+                customerId={loan.customer_id}
+                fetchLoanData={fetchLoanData}
+                show={showPaymentModal}
+                handleClose={() => setShowPaymentModal(false)}
+            />
+            <AddPrincipalModal
+                loanId={loan.id}
+                fetchLoanData={fetchLoanData}
+                show={showPrincipalModal}
+                handleClose={() => setShowPrincipalModal(false)}
+            />
+            <SettleLoanModal
+                loanId={loan.id}
+                customerId={loan.customer_id}
+                fetchLoanData={fetchLoanData}
+                show={showSettleModal}
+                handleClose={() => setShowSettleModal(false)}
+                balance={loan.remaining_principal}
+                currentInterest={loan.current_interest_due}
+            />
+            <EditLoanModal
+                loan={loan}
+                fetchLoanData={fetchLoanData}
+                show={showEditModal}
+                handleClose={() => setShowEditModal(false)}
+            />
         </div>
     );
 }
