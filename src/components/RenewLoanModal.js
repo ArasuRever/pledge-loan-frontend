@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/components/RenewLoanModal.js
+import React, { useState } from 'react'; // Removed useEffect
 import axios from 'axios';
 
 // Styles
@@ -10,7 +11,7 @@ const RenewLoanModal = ({ loan, outstandingInterest, onClose, onRenewalSuccess }
   
   const [formData, setFormData] = useState({
     newBookLoanNumber: '',
-    interestPaid: '', // Default empty
+    interestPaid: '',
     newInterestRate: loan.interest_rate
   });
   const [loading, setLoading] = useState(false);

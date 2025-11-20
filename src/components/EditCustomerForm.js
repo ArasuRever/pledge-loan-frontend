@@ -5,12 +5,10 @@ import axios from 'axios';
 const API_URL = process.env.REACT_APP_API_URL;
 
 const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
-  // 1. Initialize ALL fields, including the new KYC ones
   const [formData, setFormData] = useState({
     name: customer.name || '',
     phone_number: customer.phone_number || '',
     address: customer.address || '',
-    // New Fields
     id_proof_type: customer.id_proof_type || 'Aadhaar',
     id_proof_number: customer.id_proof_number || '',
     nominee_name: customer.nominee_name || '',
@@ -22,7 +20,6 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Update local state if the prop changes (e.g. opening a different customer)
   useEffect(() => {
     setFormData({
       name: customer.name || '',
@@ -50,7 +47,6 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
     setError('');
 
     const data = new FormData();
-    // 2. Append ALL fields to FormData
     data.append('name', formData.name);
     data.append('phone_number', formData.phone_number);
     data.append('address', formData.address);
@@ -67,18 +63,17 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
     }
 
     try {
-      const response = await axios.put(`${API_URL}/api/customers/${customer.id}`, data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // --- FIX: REMOVED THE HEADERS OBJECT ---
+      // Axios automatically sets the correct Content-Type with boundary for FormData
+      const response = await axios.put(`${API_URL}/api/customers/${customer.id}`, data);
       
-      // Call the success handler passed from parent
       if (onUpdateSuccess) {
           onUpdateSuccess(response.data);
       }
       alert('Customer updated successfully!');
     } catch (err) {
-      console.error(err);
-      setError('Failed to update customer.');
+      console.error("Update Error:", err);
+      setError('Failed to update customer. Please check data.');
     } finally {
       setLoading(false);
     }

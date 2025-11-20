@@ -250,7 +250,7 @@ function LoanPage({ userRole }) {
             } finally { setIsLoading(false); }
         };
         fetchLoanData();
-    }, [id, refreshTrigger, API_URL]);
+    }, [id, refreshTrigger]);
 
     // Render Logic
     if (isLoading) return <div className="text-center mt-5">Loading loan details...</div>;
