@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
-// Added onCancel prop here
 const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
   const API_URL = process.env.REACT_APP_API_URL;
 
@@ -10,7 +9,7 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
   const [formData, setFormData] = useState({
     book_loan_number: '',
     principal_amount: '',
-    interest_rate: '2.5',
+    interest_rate: '2.5', // <--- ENSURE THIS IS '2.5'
     item_type: 'gold',
     description: '',
     quality: '',
@@ -32,7 +31,6 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Cleanup
   useEffect(() => { return () => stopCameraStream(); }, []);
 
   // --- Handlers ---
@@ -85,6 +83,8 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
 
   const handleSubmit = async (e) => {
       e.preventDefault();
+      console.log("Submitting Loan Data:", formData); // <--- DEBUG LOG
+
       const data = new FormData();
       data.append('customer_id', customerId);
       Object.keys(formData).forEach(key => {
@@ -99,8 +99,10 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
       try {
         await axios.post(`${API_URL}/api/loans`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('New loan added!');
+        // Reset
         setFormData({
-            book_loan_number: '', principal_amount: '', interest_rate: '2.5',
+            book_loan_number: '', principal_amount: '', 
+            interest_rate: '2.5', // <--- RESET TO 2.5 explicitly
             item_type: 'gold', description: '', quality: '',
             gross_weight: '', net_weight: '', purity: '', appraised_value: '',
             deductFirstMonthInterest: false
@@ -140,10 +142,15 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
           <div className="row g-3 mb-3">
             <div className="col-md-6">
                <label className="form-label fw-medium">Monthly Interest Rate (%)</label>
+               {/* UPDATED: Explicit options to prevent mapping errors */}
                <select className="form-select" name="interest_rate" value={formData.interest_rate} onChange={handleChange}>
-                  {['1.0', '1.5', '2.0', '2.25', '2.5', '3.0'].map(rate => (
-                      <option key={rate} value={rate}>{rate}%</option>
-                  ))}
+                  <option value="1.0">1.0%</option>
+                  <option value="1.5">1.5%</option>
+                  <option value="2.0">2.0%</option>
+                  <option value="2.25">2.25%</option>
+                  <option value="2.5">2.5%</option>
+                  <option value="3.0">3.0%</option>
+                  <option value="3.5">3.5%</option>
                </select>
              </div>
              <div className="col-md-6 d-flex align-items-end">
@@ -220,7 +227,7 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
             )}
           </div>
 
-          {/* NEW: Action Buttons with Cancel */}
+          {/* Action Buttons with Cancel */}
           <div className="d-flex justify-content-end gap-2">
              {onCancel && (
                <button type="button" className="btn btn-secondary btn-lg" onClick={onCancel}>
