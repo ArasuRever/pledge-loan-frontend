@@ -22,7 +22,11 @@ export const PrintableInvoice = React.forwardRef(({ loanDetails }, ref) => {
 
   if (!loanDetails) return <div ref={ref}>Loading...</div>;
 
-  const formatDate = (d) => new Date(d).toLocaleDateString('en-GB');
+  const formatDate = (d) => {
+      if (!d) return '-';
+      return new Date(d).toLocaleDateString('en-GB');
+  };
+  
   const formatMoney = (m) => `₹${parseFloat(m || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   return (
@@ -39,15 +43,16 @@ export const PrintableInvoice = React.forwardRef(({ loanDetails }, ref) => {
         <div style={boxStyle}>
           <span style={labelStyle}>LOAN DETAILS:</span>
           <div><strong>Loan No:</strong> {loanDetails.book_loan_number || loanDetails.id}</div>
-          <div><strong>Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
-          <div><strong>Amount:</strong> {formatMoney(loanDetails.principal_amount)}</div>
+          <div><strong>Pledge Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
+          <div><strong>Due Date:</strong> {formatDate(loanDetails.due_date)}</div>
+          <div style={{marginTop: '5px'}}><strong>Amount:</strong> {formatMoney(loanDetails.principal_amount)}</div>
           <div><strong>Interest:</strong> {loanDetails.interest_rate}% p.m.</div>
         </div>
         <div style={boxStyle}>
           <span style={labelStyle}>CUSTOMER DETAILS:</span>
           <div><strong>Name:</strong> {loanDetails.customer_name}</div>
           <div><strong>Phone:</strong> {loanDetails.phone_number}</div>
-          <div><strong>Address:</strong> {loanDetails.address}</div>
+          <div style={{ whiteSpace: 'pre-wrap' }}><strong>Address:</strong> {loanDetails.address || 'N/A'}</div>
         </div>
       </div>
 

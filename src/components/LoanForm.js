@@ -2,9 +2,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL;
+// Added onCancel prop here
+const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
+  const API_URL = process.env.REACT_APP_API_URL;
 
-const LoanForm = ({ customerId, onLoanAdded }) => {
   // --- Form State ---
   const [formData, setFormData] = useState({
     book_loan_number: '',
@@ -13,10 +14,10 @@ const LoanForm = ({ customerId, onLoanAdded }) => {
     item_type: 'gold',
     description: '',
     quality: '',
-    gross_weight: '', // New
-    net_weight: '',   // New
-    purity: '',       // New
-    appraised_value: '', // New
+    gross_weight: '',
+    net_weight: '',
+    purity: '',
+    appraised_value: '',
     deductFirstMonthInterest: false
   });
 
@@ -40,10 +41,8 @@ const LoanForm = ({ customerId, onLoanAdded }) => {
     setFormData({ ...formData, [e.target.name]: value });
   };
 
-  // Auto-calculate Net Weight (Optional Helper)
   const handleGrossWeightChange = (e) => {
      const gWeight = e.target.value;
-     // If net weight is empty, pre-fill it with gross weight for convenience
      if (formData.net_weight === '') {
         setFormData(prev => ({ ...prev, gross_weight: gWeight, net_weight: gWeight }));
      } else {
@@ -88,7 +87,6 @@ const LoanForm = ({ customerId, onLoanAdded }) => {
       e.preventDefault();
       const data = new FormData();
       data.append('customer_id', customerId);
-      // Append all form fields
       Object.keys(formData).forEach(key => {
           data.append(key, formData[key]);
       });
@@ -101,7 +99,6 @@ const LoanForm = ({ customerId, onLoanAdded }) => {
       try {
         await axios.post(`${API_URL}/api/loans`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('New loan added!');
-        // Reset Form
         setFormData({
             book_loan_number: '', principal_amount: '', interest_rate: '2.5',
             item_type: 'gold', description: '', quality: '',
@@ -223,8 +220,16 @@ const LoanForm = ({ customerId, onLoanAdded }) => {
             )}
           </div>
 
-          <div className="d-grid">
-             <button type="submit" className="btn btn-primary btn-lg">Create Loan Record</button>
+          {/* NEW: Action Buttons with Cancel */}
+          <div className="d-flex justify-content-end gap-2">
+             {onCancel && (
+               <button type="button" className="btn btn-secondary btn-lg" onClick={onCancel}>
+                 Cancel
+               </button>
+             )}
+             <button type="submit" className="btn btn-primary btn-lg flex-grow-1 flex-md-grow-0">
+               Create Loan Record
+             </button>
           </div>
         </form>
 
