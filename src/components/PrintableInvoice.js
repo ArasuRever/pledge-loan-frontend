@@ -2,105 +2,143 @@
 import React from 'react';
 
 export const PrintableInvoice = React.forwardRef(({ loanDetails }, ref) => {
-  // Styles
-  const containerStyle = { padding: '15mm', fontFamily: 'Times New Roman, serif', fontSize: '11pt', color: '#000', lineHeight: '1.4' };
-  const headerStyle = { textAlign: 'center', marginBottom: '20px', borderBottom: '2px solid #000', paddingBottom: '10px' };
-  const titleStyle = { fontSize: '16pt', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' };
-  const subTitleStyle = { fontSize: '10pt', marginTop: '5px' };
-  
-  const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' };
-  const boxStyle = { border: '1px solid #000', padding: '8px' };
-  const labelStyle = { fontWeight: 'bold', fontSize: '9pt', display: 'block', marginBottom: '2px' };
-  
-  const tableStyle = { width: '100%', borderCollapse: 'collapse', marginTop: '10px', marginBottom: '10px', fontSize: '10pt' };
-  const thStyle = { border: '1px solid black', padding: '4px', textAlign: 'center', backgroundColor: '#f0f0f0', fontWeight: 'bold' };
-  const tdStyle = { border: '1px solid black', padding: '4px', textAlign: 'center' };
-
-  const declarationStyle = { fontSize: '9pt', textAlign: 'justify', marginTop: '10px', fontStyle: 'italic' };
-  const signatureRow = { display: 'flex', justifyContent: 'space-between', marginTop: '50px', paddingTop: '10px' };
-  const signatureLine = { borderTop: '1px solid black', width: '40%', textAlign: 'center', fontSize: '10pt' };
-
-  if (!loanDetails) return <div ref={ref}>Loading...</div>;
-
-  const formatDate = (d) => {
-      if (!d) return '-';
-      return new Date(d).toLocaleDateString('en-GB');
+  // A4 dimensions in mm: 210 x 297
+  // We use a fixed width container to ensure PDF looks exactly like this.
+  const containerStyle = {
+    width: '210mm',
+    minHeight: '297mm',
+    padding: '15mm',
+    backgroundColor: 'white',
+    fontFamily: 'Times New Roman, serif',
+    color: '#000',
+    boxSizing: 'border-box',
+    position: 'relative',
+    fontSize: '11pt',
   };
+
+  // Styles
+  const headerTitle = { fontSize: '20pt', fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase', marginBottom: '5px' };
+  const headerSub = { fontSize: '10pt', textAlign: 'center', marginBottom: '2px' };
+  const docTitle = { fontSize: '14pt', fontWeight: 'bold', textAlign: 'center', textDecoration: 'underline', marginTop: '15px', marginBottom: '20px' };
+
+  const tableStyle = { width: '100%', borderCollapse: 'collapse', marginBottom: '10px' };
+  const tdLabel = { fontWeight: 'bold', width: '35%', padding: '4px', verticalAlign: 'top' };
+  const tdValue = { padding: '4px', verticalAlign: 'top' };
   
-  const formatMoney = (m) => `₹${parseFloat(m || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  const borderBox = { border: '1px solid #000', padding: '10px', height: '100%' };
+  
+  const itemsTable = { width: '100%', borderCollapse: 'collapse', marginTop: '20px' };
+  const itemTh = { border: '1px solid #000', backgroundColor: '#eee', padding: '8px', fontSize: '10pt', textAlign: 'center' };
+  const itemTd = { border: '1px solid #000', padding: '8px', textAlign: 'center' };
+
+  if (!loanDetails) return <div ref={ref}>Loading Data...</div>;
+
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-GB') : '-';
+  const formatMoney = (m) => `Rs. ${parseFloat(m || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   return (
     <div ref={ref} style={containerStyle}>
+      
       {/* HEADER */}
-      <div style={headerStyle}>
-        <div style={titleStyle}>SRI KUBERA BANKERS</div>
-        <div style={subTitleStyle}>123 Main Bazaar, Salem, Tamil Nadu - 636001 | Phone: 9876543210</div>
-        <div style={{...subTitleStyle, fontWeight: 'bold', marginTop: '8px'}}>PLEDGE TICKET / LOAN RECEIPT</div>
+      <div style={{marginBottom: '10px'}}>
+        <div style={headerTitle}>SRI KUBERA BANKERS</div>
+        <div style={headerSub}>123 Main Bazaar, Salem, Tamil Nadu - 636001</div>
+        <div style={headerSub}>Phone: 9876543210</div>
       </div>
+      
+      <div style={{borderBottom: '2px solid #000', marginBottom: '10px'}}></div>
+      
+      <div style={docTitle}>PLEDGE TICKET / LOAN RECEIPT</div>
 
-      {/* INFO GRID */}
-      <div style={gridStyle}>
-        <div style={boxStyle}>
-          <span style={labelStyle}>LOAN DETAILS:</span>
-          <div><strong>Loan No:</strong> {loanDetails.book_loan_number || loanDetails.id}</div>
-          <div><strong>Pledge Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
-          <div><strong>Due Date:</strong> {formatDate(loanDetails.due_date)}</div>
-          <div style={{marginTop: '5px'}}><strong>Amount:</strong> {formatMoney(loanDetails.principal_amount)}</div>
-          <div><strong>Interest:</strong> {loanDetails.interest_rate}% p.m.</div>
-        </div>
-        <div style={boxStyle}>
-          <span style={labelStyle}>CUSTOMER DETAILS:</span>
-          <div><strong>Name:</strong> {loanDetails.customer_name}</div>
-          <div><strong>Phone:</strong> {loanDetails.phone_number}</div>
-          <div style={{ whiteSpace: 'pre-wrap' }}><strong>Address:</strong> {loanDetails.address || 'N/A'}</div>
-        </div>
-      </div>
-
-      {/* ITEM TABLE */}
-      <strong style={{textDecoration: 'underline'}}>PARTICULARS OF PLEDGED ARTICLES:</strong>
-      <table style={tableStyle}>
-        <thead>
-          <tr>
-            <th style={thStyle}>Description</th>
-            <th style={thStyle}>Type</th>
-            <th style={thStyle}>Gross Wt (g)</th>
-            <th style={thStyle}>Net Wt (g)</th>
-            <th style={thStyle}>Purity</th>
-          </tr>
-        </thead>
+      {/* TWO COLUMN LAYOUT USING TABLE */}
+      <table style={{width: '100%', marginBottom: '20px'}}>
         <tbody>
           <tr>
-            <td style={{...tdStyle, textAlign: 'left'}}>{loanDetails.description}</td>
-            <td style={tdStyle}>{loanDetails.item_type}</td>
-            <td style={tdStyle}>{loanDetails.gross_weight || loanDetails.weight || '-'}</td>
-            <td style={tdStyle}>{loanDetails.net_weight || '-'}</td>
-            <td style={tdStyle}>{loanDetails.purity || '-'}</td>
+            {/* LEFT: LOAN DETAILS */}
+            <td style={{width: '50%', paddingRight: '10px', verticalAlign: 'top'}}>
+              <div style={borderBox}>
+                <div style={{fontWeight: 'bold', textDecoration: 'underline', marginBottom: '10px'}}>LOAN DETAILS</div>
+                <table style={tableStyle}>
+                  <tbody>
+                    <tr><td style={tdLabel}>Loan No:</td><td style={tdValue}>{loanDetails.book_loan_number || loanDetails.id}</td></tr>
+                    <tr><td style={tdLabel}>Date:</td><td style={tdValue}>{formatDate(loanDetails.pledge_date)}</td></tr>
+                    <tr><td style={tdLabel}>Principal:</td><td style={tdValue}>{formatMoney(loanDetails.principal_amount)}</td></tr>
+                    <tr><td style={tdLabel}>Interest:</td><td style={tdValue}>{loanDetails.interest_rate}% p.m.</td></tr>
+                    <tr><td style={tdLabel}>Due Date:</td><td style={tdValue}>{formatDate(loanDetails.due_date)}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+
+            {/* RIGHT: CUSTOMER DETAILS */}
+            <td style={{width: '50%', paddingLeft: '10px', verticalAlign: 'top'}}>
+              <div style={borderBox}>
+                <div style={{fontWeight: 'bold', textDecoration: 'underline', marginBottom: '10px'}}>CUSTOMER DETAILS</div>
+                <table style={tableStyle}>
+                  <tbody>
+                    <tr><td style={tdLabel}>Name:</td><td style={tdValue}>{loanDetails.customer_name}</td></tr>
+                    <tr><td style={tdLabel}>Phone:</td><td style={tdValue}>{loanDetails.phone_number}</td></tr>
+                    <tr><td style={tdLabel}>Address:</td><td style={tdValue}>{loanDetails.address || 'N/A'}</td></tr>
+                    {loanDetails.id_proof_number && (
+                        <tr><td style={tdLabel}>ID Proof:</td><td style={tdValue}>{loanDetails.id_proof_type} - {loanDetails.id_proof_number}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
 
-      {/* DECLARATION */}
-      <div style={declarationStyle}>
-        <p><strong>Terms & Declaration:</strong></p>
-        <ol style={{paddingLeft: '20px', margin: '5px 0'}}>
-          <li>I am the absolute owner of the articles pledged above and they are free from any encumbrance.</li>
-          <li>I agree to pay the interest as mentioned above. If the interest is not paid for more than 12 months, the lender has the right to auction the pledged articles after due notice.</li>
-          <li>The net weight mentioned is approximate after deducting stone/dust weight.</li>
-          <li>I have received the principal amount in cash/bank transfer.</li>
+      {/* ITEMS TABLE */}
+      <div style={{fontWeight: 'bold', textDecoration: 'underline'}}>PARTICULARS OF PLEDGED ARTICLES:</div>
+      <table style={itemsTable}>
+        <thead>
+          <tr>
+            <th style={itemTh}>Description</th>
+            <th style={itemTh}>Gross Wt</th>
+            <th style={itemTh}>Net Wt</th>
+            <th style={itemTh}>Purity</th>
+            <th style={itemTh}>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{...itemTd, textAlign: 'left'}}>{loanDetails.description} <br/><small>({loanDetails.item_type})</small></td>
+            <td style={itemTd}>{loanDetails.gross_weight || loanDetails.weight || '-'} g</td>
+            <td style={itemTd}>{loanDetails.net_weight || '-'} g</td>
+            <td style={itemTd}>{loanDetails.purity || '-'}</td>
+            <td style={itemTd}>{formatMoney(loanDetails.appraised_value)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* TERMS */}
+      <div style={{marginTop: '30px', border: '1px solid #ccc', padding: '10px', fontSize: '10pt'}}>
+        <strong>Declaration & Terms:</strong>
+        <ol style={{paddingLeft: '20px', marginTop: '5px'}}>
+          <li>I acknowledge receipt of the principal amount mentioned above.</li>
+          <li>I declare that I am the absolute owner of the pledged articles and they are free from any encumbrance.</li>
+          <li>If interest is unpaid for 12 months, the lender has the right to auction the articles after due notice.</li>
+          <li>The net weight is approximate after deducting stone/dust/enamel weight.</li>
         </ol>
       </div>
 
       {/* SIGNATURES */}
-      <div style={signatureRow}>
-        <div style={signatureLine}>
-          Signature of Borrower
+      <div style={{marginTop: '60px', display: 'flex', justifyContent: 'space-between'}}>
+        <div style={{textAlign: 'center', width: '40%'}}>
+          <div style={{borderTop: '1px solid #000', paddingTop: '5px'}}>Signature of Borrower</div>
         </div>
-        <div style={signatureLine}>
-          For SRI KUBERA BANKERS
-          <br/><br/>
-          (Authorized Signatory)
+        <div style={{textAlign: 'center', width: '40%'}}>
+          <div style={{borderTop: '1px solid #000', paddingTop: '5px'}}>For SRI KUBERA BANKERS</div>
+          <div style={{fontSize: '9pt'}}>(Authorized Signatory)</div>
         </div>
       </div>
+      
+      <div style={{position: 'absolute', bottom: '15mm', left: '0', width: '100%', textAlign: 'center', fontSize: '8pt', color: '#888'}}>
+        Computer Generated Invoice
+      </div>
+
     </div>
   );
 });

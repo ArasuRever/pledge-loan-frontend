@@ -10,19 +10,18 @@ import CustomersPage from './pages/CustomersPage';
 import CustomerPage from './pages/CustomerPage';
 import LoanPage from './pages/LoanPage';
 import AllLoansPage from './pages/AllLoansPage';
-import { OverdueLoansPage } from './pages/OverdueLoansPage';
+// --- FIX: Removed curly braces here ---
+import OverdueLoansPage from './pages/OverdueLoansPage'; 
 import LoginPage from './pages/LoginPage';
 import NewLoanWorkflowPage from './pages/NewLoanWorkflowPage';
 import EditLoanPage from './pages/EditLoanPage';
 import ManageStaffPage from './pages/ManageStaffPage';
 import RecycleBinPage from './pages/RecycleBinPage'; 
-// --- 1. NEW IMPORT ---
-import ReportsPage from './pages/ReportsPage';
 import DayBookPage from './pages/DayBookPage';
+import ReportsPage from './pages/ReportsPage';
 
 import Navbar from './components/Navbar';
 
-// ... (setAuthToken helper remains the same) ...
 const setAuthToken = (token) => {
   if (token) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -96,10 +95,8 @@ function App() {
           <Route path="/loans/:id" element={<ProtectedRoute><LoanPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans/:id/edit" element={<ProtectedRoute><EditLoanPage /></ProtectedRoute>} />
           <Route path="/recycle-bin" element={<ProtectedRoute><RecycleBinPage userRole={user?.role} /></ProtectedRoute>} />
-          
-          {/* --- 2. NEW ROUTE --- */}
-          <Route path="/reports" element={<ProtectedRoute><ReportsPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/day-book" element={<ProtectedRoute><DayBookPage /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><ReportsPage userRole={user?.role} /></ProtectedRoute>} />
 
            <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
         </Routes>
