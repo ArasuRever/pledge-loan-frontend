@@ -1,25 +1,39 @@
 // src/components/EditCustomerForm.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
-  // --- RESTORED API_URL CONSTANT ---
-  const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL;
 
+const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
+  // 1. Initialize ALL fields, including the new KYC ones
   const [formData, setFormData] = useState({
     name: customer.name || '',
     phone_number: customer.phone_number || '',
     address: customer.address || '',
-    // New Fields with fallback
+    // New Fields
     id_proof_type: customer.id_proof_type || 'Aadhaar',
     id_proof_number: customer.id_proof_number || '',
     nominee_name: customer.nominee_name || '',
     nominee_relation: customer.nominee_relation || ''
   });
+
   const [photo, setPhoto] = useState(null);
   const [removeCurrentImage, setRemoveCurrentImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Update local state if the prop changes (e.g. opening a different customer)
+  useEffect(() => {
+    setFormData({
+      name: customer.name || '',
+      phone_number: customer.phone_number || '',
+      address: customer.address || '',
+      id_proof_type: customer.id_proof_type || 'Aadhaar',
+      id_proof_number: customer.id_proof_number || '',
+      nominee_name: customer.nominee_name || '',
+      nominee_relation: customer.nominee_relation || ''
+    });
+  }, [customer]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -36,10 +50,10 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
     setError('');
 
     const data = new FormData();
+    // 2. Append ALL fields to FormData
     data.append('name', formData.name);
     data.append('phone_number', formData.phone_number);
     data.append('address', formData.address);
-    // Append New Fields
     data.append('id_proof_type', formData.id_proof_type);
     data.append('id_proof_number', formData.id_proof_number);
     data.append('nominee_name', formData.nominee_name);
@@ -53,11 +67,15 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
     }
 
     try {
-      // --- USING API_URL HERE ---
-      const response = await axios.put(`${API_URL}/customers/${customer.id}`, data, {
+      const response = await axios.put(`${API_URL}/api/customers/${customer.id}`, data, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      onUpdateSuccess(response.data);
+      
+      // Call the success handler passed from parent
+      if (onUpdateSuccess) {
+          onUpdateSuccess(response.data);
+      }
+      alert('Customer updated successfully!');
     } catch (err) {
       console.error(err);
       setError('Failed to update customer.');
@@ -68,10 +86,11 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
 
   return (
     <div className="card shadow-sm p-4 mb-4">
-      <h5 className="mb-3">Edit Customer: {customer.name}</h5>
+      <h5 className="mb-3 text-primary">Edit Customer: {customer.name}</h5>
       {error && <div className="alert alert-danger">{error}</div>}
+      
       <form onSubmit={handleSubmit}>
-        
+        {/* Row 1: Basic Info */}
         <div className="row">
             <div className="col-md-4 mb-3">
                 <label className="form-label">Name</label>
@@ -87,6 +106,7 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
             </div>
         </div>
 
+        {/* Row 2: KYC Info */}
         <div className="row">
             <div className="col-md-4 mb-3">
                 <label className="form-label">ID Proof Type</label>
@@ -114,6 +134,7 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
             </div>
         </div>
 
+         {/* Row 3: Nominee Info */}
          <div className="row">
             <div className="col-md-6 mb-3">
                 <label className="form-label">Nominee Name</label>
@@ -127,7 +148,9 @@ const EditCustomerForm = ({ customer, onUpdateSuccess, onCancel }) => {
 
         <div className="d-flex justify-content-end gap-2">
           <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'Saving...' : 'Save Changes'}</button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Saving...' : 'Save Changes'}
+          </button>
         </div>
       </form>
     </div>
