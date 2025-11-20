@@ -2,184 +2,224 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-// Get the API URL from the .env file
-const API_URL = process.env.REACT_APP_API_URL;
-
-function ManageStaffPage({ userRole }) {
+const ManageStaffPage = () => {
+  const API_URL = process.env.REACT_APP_API_URL;
+  
+  // State for List
   const [users, setUsers] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  // State for Create Form
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'staff' });
+  const [isCreating, setIsCreating] = useState(false);
 
-  // State for the new staff form
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  // State for Change Password Modal
+  const [passwordData, setPasswordData] = useState({ userId: null, username: '', newPassword: '' });
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
-  // Fetch all users on component mount
   useEffect(() => {
-    if (userRole === 'admin') {
-      fetchUsers();
-    }
-  }, [userRole]);
+    fetchUsers();
+    // eslint-disable-next-line
+  }, []);
 
   const fetchUsers = async () => {
-    setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/api/users`);
-      setUsers(response.data);
-      setError(null);
+      const res = await axios.get(`${API_URL}/api/users`);
+      setUsers(res.data);
     } catch (err) {
-      console.error("Error fetching users:", err);
-      setError('Failed to fetch user list.');
+      console.error("Fetch users error:", err);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  // --- Event Handlers ---
+  // --- HANDLERS ---
 
-  const handleCreateStaff = async (e) => {
+  const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (!newUsername || !newPassword) {
-      alert('Please enter a username and password.');
-      return;
-    }
+    if (!newUser.username || !newUser.password) return alert("Username and Password required");
+    
     try {
-      await axios.post(`${API_URL}/api/users/staff`, {
-        username: newUsername,
-        password: newPassword,
-      });
-      alert('Staff user created successfully!');
-      setNewUsername('');
-      setNewPassword('');
-      fetchUsers(); // Refresh the user list
+      await axios.post(`${API_URL}/api/users/create`, newUser);
+      alert(`New ${newUser.role} created successfully!`);
+      setNewUser({ username: '', password: '', role: 'staff' });
+      setIsCreating(false);
+      fetchUsers();
     } catch (err) {
-      console.error("Error creating staff:", err);
-      alert(err.response?.data || 'Failed to create staff user.');
+      alert(err.response?.data || "Failed to create user");
     }
   };
 
-  const handleChangePassword = async (userId, username) => {
-    const newPassword = prompt(`Enter new password for ${username}:`);
-    if (!newPassword) return; // User cancelled
+  const handleDeleteUser = async (id, username) => {
+    if (!window.confirm(`Are you sure you want to delete user '${username}'? This cannot be undone.`)) return;
+    
+    try {
+      await axios.delete(`${API_URL}/api/users/${id}`);
+      alert("User deleted.");
+      fetchUsers();
+    } catch (err) {
+      alert(err.response?.data || "Failed to delete user");
+    }
+  };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
     try {
       await axios.put(`${API_URL}/api/users/change-password`, {
-        userId: userId,
-        newPassword: newPassword,
+        userId: passwordData.userId,
+        newPassword: passwordData.newPassword
       });
-      alert(`Password for ${username} updated successfully!`);
+      alert("Password updated successfully.");
+      setShowPasswordModal(false);
+      setPasswordData({ userId: null, username: '', newPassword: '' });
     } catch (err) {
-      console.error("Error changing password:", err);
-      alert(err.response?.data || 'Failed to change password.');
+      alert(err.response?.data || "Failed to update password");
     }
   };
-
-  const handleDeleteStaff = async (userId, username) => {
-    if (window.confirm(`Are you sure you want to delete staff member ${username}? This cannot be undone.`)) {
-      try {
-        await axios.delete(`${API_URL}/api/users/${userId}`);
-        alert(`Staff user ${username} deleted.`);
-        fetchUsers(); // Refresh the user list
-      } catch (err) {
-        console.error("Error deleting staff:", err);
-        alert(err.response?.data || 'Failed to delete staff user.');
-      }
-    }
-  };
-
-  // --- Render Logic ---
-
-  // Show access denied message if a non-admin tries to view this page
-  // This logic is based on your existing components
-  if (userRole !== 'admin') {
-    return (
-      <div className="alert alert-danger" role="alert">
-        <h4>Access Denied</h4>
-        <p>You do not have permission to view this page.</p>
-      </div>
-    );
-  }
-
-  if (isLoading) return <div>Loading...</div>;
 
   return (
-    <div>
-      <h1 className="mb-4">Manage Staff & Users</h1>
-      {error && <div className="alert alert-danger">{error}</div>}
-
-      {/* 1. Create New Staff Form */}
-      <div className="card mb-4">
-        <div className="card-header">
-          <h5>Create New Staff User</h5>
-        </div>
-        <div className="card-body">
-          <form onSubmit={handleCreateStaff}>
-            <div className="row">
-              <div className="col-md-5 mb-3">
-                <label htmlFor="newUsername" className="form-label">Username</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  id="newUsername"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  placeholder="New staff username"
-                />
-              </div>
-              <div className="col-md-5 mb-3">
-                <label htmlFor="newPassword" className="form-label">Password</label>
-                <input
-                  type="password"
-                  className="form-control"
-                  id="newPassword"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Temporary password"
-                />
-              </div>
-              <div className="col-md-2 d-flex align-items-end mb-3">
-                <button type="submit" className="btn btn-primary w-100">Create</button>
-              </div>
-            </div>
-          </form>
-        </div>
+    <div className="container mt-4">
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2 className="text-primary fw-bold"><i className="bi bi-people-fill me-2"></i>Manage Access</h2>
+        <button 
+          className={`btn ${isCreating ? 'btn-secondary' : 'btn-success'}`}
+          onClick={() => setIsCreating(!isCreating)}
+        >
+          <i className={`bi ${isCreating ? 'bi-x-lg' : 'bi-person-plus-fill'} me-2`}></i>
+          {isCreating ? 'Cancel' : 'Create New User'}
+        </button>
       </div>
 
-      {/* 2. User List */}
-      <div className="card">
-        <div className="card-header">
-          <h5>Existing Users</h5>
-        </div>
-        <ul className="list-group list-group-flush">
-          {users.map((user) => (
-            <li key={user.id} className="list-group-item d-flex justify-content-between align-items-center">
-              <div>
-                <strong>{user.username}</strong>
-                <br />
-                <small className="text-muted">Role: {user.role}</small>
+      {/* --- CREATE USER FORM --- */}
+      {isCreating && (
+        <div className="card shadow-sm mb-4 border-success">
+          <div className="card-header bg-success text-white fw-bold">
+             Add New Admin or Staff
+          </div>
+          <div className="card-body">
+            <form onSubmit={handleCreateUser} className="row g-3 align-items-end">
+              <div className="col-md-4">
+                <label className="form-label fw-medium">Username</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  value={newUser.username} 
+                  onChange={(e) => setNewUser({...newUser, username: e.target.value})} 
+                  required
+                  autoComplete="off"
+                />
               </div>
-              <div>
-                <button
-                  className="btn btn-outline-secondary btn-sm me-2"
-                  onClick={() => handleChangePassword(user.id, user.username)}
+              <div className="col-md-3">
+                <label className="form-label fw-medium">Password</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  value={newUser.password} 
+                  onChange={(e) => setNewUser({...newUser, password: e.target.value})} 
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="col-md-3">
+                <label className="form-label fw-medium">Role</label>
+                <select 
+                  className="form-select" 
+                  value={newUser.role} 
+                  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                 >
-                  Change Password
-                </button>
-                {user.role === 'staff' && (
-                  <button
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() => handleDeleteStaff(user.id, user.username)}
-                  >
-                    Delete
-                  </button>
-                )}
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
+                </select>
               </div>
-            </li>
-          ))}
-        </ul>
+              <div className="col-md-2 d-grid">
+                <button type="submit" className="btn btn-primary">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- USERS LIST --- */}
+      <div className="card shadow-sm border-0">
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-hover align-middle mb-0">
+              <thead className="table-light">
+                <tr>
+                  <th>ID</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th className="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="4" className="text-center py-4">Loading...</td></tr>
+                ) : users.map(user => (
+                  <tr key={user.id}>
+                    <td className="text-muted small">#{user.id}</td>
+                    <td className="fw-bold">{user.username}</td>
+                    <td>
+                      <span className={`badge rounded-pill bg-${user.role === 'admin' ? 'danger' : 'info text-dark'}`}>
+                        {user.role.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="text-end">
+                      <button 
+                        className="btn btn-sm btn-outline-warning me-2"
+                        onClick={() => {
+                            setPasswordData({ userId: user.id, username: user.username, newPassword: '' });
+                            setShowPasswordModal(true);
+                        }}
+                      >
+                        <i className="bi bi-key-fill me-1"></i> Pwd
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleDeleteUser(user.id, user.username)}
+                      >
+                        <i className="bi bi-trash-fill"></i>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
+
+      {/* --- CHANGE PASSWORD MODAL --- */}
+      {showPasswordModal && (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
+            backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1050, display: 'flex', 
+            justifyContent: 'center', alignItems: 'center'
+        }}>
+          <div className="bg-white p-4 rounded shadow w-100" style={{maxWidth: '400px'}}>
+             <h5 className="mb-3">Change Password for <strong>{passwordData.username}</strong></h5>
+             <form onSubmit={handleChangePassword}>
+                <div className="mb-3">
+                    <label className="form-label">New Password</label>
+                    <input 
+                        type="text" 
+                        className="form-control"
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
+                        required
+                    />
+                </div>
+                <div className="d-flex justify-content-end gap-2">
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowPasswordModal(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary">Update</button>
+                </div>
+             </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
-}
+};
 
 export default ManageStaffPage;
