@@ -18,6 +18,7 @@ import ManageStaffPage from './pages/ManageStaffPage';
 import RecycleBinPage from './pages/RecycleBinPage'; 
 // --- 1. NEW IMPORT ---
 import ReportsPage from './pages/ReportsPage';
+import DayBookPage from './pages/DayBookPage';
 
 import Navbar from './components/Navbar';
 
@@ -98,6 +99,7 @@ function App() {
           
           {/* --- 2. NEW ROUTE --- */}
           <Route path="/reports" element={<ProtectedRoute><ReportsPage userRole={user?.role} /></ProtectedRoute>} />
+          <Route path="/day-book" element={<ProtectedRoute><DayBookPage /></ProtectedRoute>} />
 
            <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
         </Routes>

@@ -30,20 +30,51 @@ function Navbar({ user, onLogout }) {
         </button>
         <div className="collapse navbar-collapse" id="navbarContent">
           <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-            <li className="nav-item"><Link className="nav-link" to="/customers">Customers</Link></li>
-            <li className="nav-item"><Link className="nav-link" to="/loans">Loans</Link></li>
             
+            {/* 1. Customers */}
+            <li className="nav-item">
+              <Link className="nav-link" to="/customers">Customers</Link>
+            </li>
+            
+            {/* 2. New Loan (Moved Up) */}
+            <li className="nav-item">
+              <Link className="nav-link text-success fw-bold" to="/new-loan">New Loan</Link>
+            </li>
+
+            {/* 3. Loans */}
+            <li className="nav-item">
+              <Link className="nav-link" to="/loans">Loans</Link>
+            </li>
+            
+            {/* Admin Only Links */}
             {user?.role === 'admin' && (
               <> 
-                <li className="nav-item"><Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link></li>
-                <li className="nav-item"><Link className="nav-link" to="/manage-staff">Manage Staff</Link></li>
-                <li className="nav-item"><Link className="nav-link" to="/recycle-bin">Recycle Bin</Link></li>
-                {/* --- NEW LINK --- */}
-                <li className="nav-item"><Link className="nav-link fw-bold text-warning" to="/reports">Reports</Link></li>
+                {/* 4. Overdue */}
+                <li className="nav-item">
+                  <Link className="nav-link text-danger fw-bold" to="/overdue">Overdue</Link>
+                </li>
+
+                {/* 5. Day Book (Added) */}
+                <li className="nav-item">
+                  <Link className="nav-link" to="/day-book">Day Book</Link>
+                </li>
+
+                {/* 6. Reports */}
+                <li className="nav-item">
+                  <Link className="nav-link fw-bold text-warning" to="/reports">Reports</Link>
+                </li>
+
+                {/* 7. Recycle Bin */}
+                <li className="nav-item">
+                  <Link className="nav-link" to="/recycle-bin">Recycle Bin</Link>
+                </li>
+
+                {/* 8. Manage Staff */}
+                <li className="nav-item">
+                  <Link className="nav-link" to="/manage-staff">Manage Staff</Link>
+                </li>
               </>
             )}
-
-            <li className="nav-item"><Link className="nav-link text-success fw-bold" to="/new-loan">New Loan</Link></li>
           </ul>
 
           {user && (
