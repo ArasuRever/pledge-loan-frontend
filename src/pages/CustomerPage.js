@@ -5,8 +5,7 @@ import axios from 'axios';
 import EditCustomerForm from '../components/EditCustomerForm';
 
 const CustomerPage = ({ userRole }) => {
-  // --- RESTORED API_URL CONSTANT ---
-  const API_URL = process.env.REACT_APP_API_URL;
+  const API_URL = process.env.REACT_APP_API_URL; // e.g. https://your-app.onrender.com
 
   const { id } = useParams();
   const navigate = useNavigate();
@@ -19,12 +18,12 @@ const CustomerPage = ({ userRole }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // --- USING API_URL HERE ---
-        const customerRes = await axios.get(`${API_URL}/customers/${id}`);
+        // FIXED: Added '/api' before /customers
+        const customerRes = await axios.get(`${API_URL}/api/customers/${id}`);
         setCustomer(customerRes.data);
         
-        // --- AND HERE ---
-        const loansRes = await axios.get(`${API_URL}/customers/${id}/loans`);
+        // FIXED: Added '/api' before /customers
+        const loansRes = await axios.get(`${API_URL}/api/customers/${id}/loans`);
         setLoans(loansRes.data);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -34,7 +33,7 @@ const CustomerPage = ({ userRole }) => {
       }
     };
     fetchData();
-  }, [id, API_URL]); // Added API_URL to dependency array
+  }, [id, API_URL]);
 
   const handleUpdateSuccess = (updatedCustomer) => {
     setCustomer(updatedCustomer);
@@ -44,8 +43,8 @@ const CustomerPage = ({ userRole }) => {
   const handleDelete = async () => {
     if (!window.confirm("Are you sure? This will move the customer and closed loans to the Recycle Bin.")) return;
     try {
-      // --- USING API_URL HERE ---
-      await axios.delete(`${API_URL}/customers/${id}`);
+      // FIXED: Added '/api'
+      await axios.delete(`${API_URL}/api/customers/${id}`);
       alert("Customer moved to Recycle Bin.");
       navigate('/customers');
     } catch (err) {
@@ -58,8 +57,9 @@ const CustomerPage = ({ userRole }) => {
   if (!customer) return <div className="alert alert-warning m-4">Customer not found.</div>;
 
   return (
-    <div>
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <div className="container pb-5">
+      {/* Header Navigation */}
+      <div className="d-flex justify-content-between align-items-center mb-4 mt-2">
         <button className="btn btn-outline-secondary" onClick={() => navigate(-1)}>
             <i className="bi bi-arrow-left me-2"></i>Back
         </button>
@@ -79,53 +79,69 @@ const CustomerPage = ({ userRole }) => {
         <EditCustomerForm customer={customer} onUpdateSuccess={handleUpdateSuccess} onCancel={() => setIsEditing(false)} />
       ) : (
         <div className="row mb-4">
-          {/* Customer Profile Card */}
-          <div className="col-md-4">
-            <div className="card shadow-sm">
-              <div className="card-body text-center">
-                 {customer.customer_image_url ? (
-                    <img 
-                      src={customer.customer_image_url} 
-                      alt={customer.name} 
-                      className="img-fluid rounded-circle mb-3" 
-                      style={{ width: '150px', height: '150px', objectFit: 'cover', border: '4px solid #f8f9fa' }} 
-                    />
-                 ) : (
-                    <div className="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center mx-auto mb-3" style={{ width: '150px', height: '150px', fontSize: '3rem' }}>
-                      {customer.name.charAt(0).toUpperCase()}
-                    </div>
-                 )}
-                 <h3 className="card-title">{customer.name}</h3>
-                 <p className="text-muted"><i className="bi bi-telephone-fill me-2"></i>{customer.phone_number}</p>
-                 <p className="text-muted"><i className="bi bi-geo-alt-fill me-2"></i>{customer.address || 'No Address'}</p>
-                 
-                 <hr/>
-                 
-                 {/* New KYC & Nominee Section */}
-                 <div className="text-start px-3">
-                    <h6 className="text-uppercase text-muted small fw-bold">KYC Details</h6>
-                    <p className="mb-1"><strong>ID Type:</strong> {customer.id_proof_type || 'Not Provided'}</p>
-                    <p className="mb-3"><strong>ID Number:</strong> {customer.id_proof_number || '---'}</p>
-                    
-                    <h6 className="text-uppercase text-muted small fw-bold">Nominee</h6>
-                    <p className="mb-1"><strong>Name:</strong> {customer.nominee_name || '---'}</p>
-                    <p className="mb-0"><strong>Relation:</strong> {customer.nominee_relation || '---'}</p>
+          {/* Profile Card */}
+          <div className="col-md-4 mb-3">
+            <div className="card shadow-sm border-0 h-100">
+              <div className="card-body text-center p-4">
+                 {/* Profile Image Logic */}
+                 <div className="mb-3 d-flex justify-content-center">
+                   {customer.customer_image_url ? (
+                      <img 
+                        src={customer.customer_image_url} 
+                        alt={customer.name} 
+                        className="rounded-circle shadow-sm" 
+                        style={{ width: '140px', height: '140px', objectFit: 'cover', border: '4px solid #fff' }} 
+                      />
+                   ) : (
+                      <div className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center shadow-sm" style={{ width: '140px', height: '140px', fontSize: '3.5rem', fontWeight: 'bold' }}>
+                        {customer.name.charAt(0).toUpperCase()}
+                      </div>
+                   )}
                  </div>
+                 
+                 <h3 className="card-title fw-bold text-dark mb-1">{customer.name}</h3>
+                 <p className="text-muted mb-3"><i className="bi bi-telephone-fill me-2 text-primary"></i>{customer.phone_number}</p>
+                 
+                 <div className="card bg-light border-0 p-3 mb-3 text-start">
+                    <small className="text-uppercase text-muted fw-bold mb-2 d-block">Address</small>
+                    <p className="mb-0 text-dark">{customer.address || 'No Address Provided'}</p>
+                 </div>
+                 
+                 {/* KYC & Nominee Section - Only show if data exists */}
+                 {(customer.id_proof_number || customer.nominee_name) && (
+                   <div className="text-start mt-4">
+                      <h6 className="text-uppercase text-primary small fw-bold border-bottom pb-2 mb-3">Additional Details</h6>
+                      
+                      {customer.id_proof_number && (
+                        <div className="mb-3">
+                          <small className="text-muted d-block">ID Proof ({customer.id_proof_type})</small>
+                          <span className="fw-medium">{customer.id_proof_number}</span>
+                        </div>
+                      )}
+                      
+                      {customer.nominee_name && (
+                        <div className="mb-0">
+                          <small className="text-muted d-block">Nominee ({customer.nominee_relation})</small>
+                          <span className="fw-medium">{customer.nominee_name}</span>
+                        </div>
+                      )}
+                   </div>
+                 )}
               </div>
             </div>
           </div>
 
-          {/* Loan History Column (Unchanged) */}
+          {/* Loan History Column */}
           <div className="col-md-8">
-            <div className="card shadow-sm">
-              <div className="card-header bg-white py-3">
-                <h5 className="mb-0">Loan History</h5>
+            <div className="card shadow-sm border-0">
+              <div className="card-header bg-white py-3 border-bottom-0">
+                <h5 className="mb-0 fw-bold text-primary"><i className="bi bi-clock-history me-2"></i>Loan History</h5>
               </div>
               <div className="table-responsive">
                 <table className="table table-hover align-middle mb-0">
                   <thead className="table-light">
                     <tr>
-                      <th>Loan #</th>
+                      <th className="ps-3">Loan #</th>
                       <th>Date</th>
                       <th>Amount</th>
                       <th>Status</th>
@@ -134,24 +150,24 @@ const CustomerPage = ({ userRole }) => {
                   </thead>
                   <tbody>
                     {loans.length === 0 ? (
-                        <tr><td colSpan="5" className="text-center py-4 text-muted">No loans found for this customer.</td></tr>
+                        <tr><td colSpan="5" className="text-center py-5 text-muted">No loans found for this customer.</td></tr>
                     ) : (
                         loans.map(loan => (
                             <tr key={loan.loan_id}>
-                                <td className="fw-bold">{loan.book_loan_number}</td>
+                                <td className="fw-bold ps-3 text-primary">{loan.book_loan_number}</td>
                                 <td>{new Date(loan.pledge_date).toLocaleDateString()}</td>
-                                <td>₹{parseFloat(loan.principal_amount).toFixed(2)}</td>
+                                <td className="fw-bold">₹{parseFloat(loan.principal_amount).toFixed(2)}</td>
                                 <td>
                                     <span className={`badge rounded-pill bg-${
                                         loan.status === 'active' ? 'success' : 
                                         loan.status === 'overdue' ? 'danger' : 
                                         loan.status === 'paid' ? 'secondary' : 'warning'
-                                    }`}>
+                                    } px-3 py-2`}>
                                         {loan.status.toUpperCase()}
                                     </span>
                                 </td>
                                 <td>
-                                    <Link to={`/loans/${loan.loan_id}`} className="btn btn-sm btn-outline-primary">
+                                    <Link to={`/loans/${loan.loan_id}`} className="btn btn-sm btn-light border">
                                         View
                                     </Link>
                                 </td>
