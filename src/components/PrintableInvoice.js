@@ -1,115 +1,101 @@
+// src/components/PrintableInvoice.js
 import React from 'react';
 
-// Use React.forwardRef and a NAMED export
 export const PrintableInvoice = React.forwardRef(({ loanDetails }, ref) => {
+  // Styles
+  const containerStyle = { padding: '15mm', fontFamily: 'Times New Roman, serif', fontSize: '11pt', color: '#000', lineHeight: '1.4' };
+  const headerStyle = { textAlign: 'center', marginBottom: '20px', borderBottom: '2px solid #000', paddingBottom: '10px' };
+  const titleStyle = { fontSize: '16pt', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' };
+  const subTitleStyle = { fontSize: '10pt', marginTop: '5px' };
+  
+  const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' };
+  const boxStyle = { border: '1px solid #000', padding: '8px' };
+  const labelStyle = { fontWeight: 'bold', fontSize: '9pt', display: 'block', marginBottom: '2px' };
+  
+  const tableStyle = { width: '100%', borderCollapse: 'collapse', marginTop: '10px', marginBottom: '10px', fontSize: '10pt' };
+  const thStyle = { border: '1px solid black', padding: '4px', textAlign: 'center', backgroundColor: '#f0f0f0', fontWeight: 'bold' };
+  const tdStyle = { border: '1px solid black', padding: '4px', textAlign: 'center' };
 
-  // Inline styles for printing - helps maintain layout across print/PDF
-  const containerStyle = { padding: '20mm', fontFamily: 'Arial, sans-serif', fontSize: '10pt', color: '#000' };
-  const headerStyle = { textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '10px', marginBottom: '15px' };
-  const flexBetween = { display: 'flex', justifyContent: 'space-between', marginTop: '15px', marginBottom: '15px' };
-  const sectionTitleStyle = { marginTop: '15px', marginBottom: '5px', borderBottom: '1px solid #ccc', paddingBottom: '3px' };
-  const hrStyle = { border: 0, borderTop: '1px dashed #ccc', margin: '15px 0' };
-  const tableStyle = { width: '100%', borderCollapse: 'collapse', marginTop: '10px', fontSize: '9pt' };
-  const thStyle = { border: '1px solid black', padding: '6px', textAlign: 'left', backgroundColor: '#eee', fontWeight: 'bold' };
-  const tdStyle = { border: '1px solid black', padding: '6px' };
-  const signatureSection = { marginTop: '40px', paddingTop: '20px', borderTop: '1px dashed #ccc' };
-  const footerStyle = { marginTop: '20px', fontSize: '8pt', textAlign: 'center', color: '#555' };
+  const declarationStyle = { fontSize: '9pt', textAlign: 'justify', marginTop: '10px', fontStyle: 'italic' };
+  const signatureRow = { display: 'flex', justifyContent: 'space-between', marginTop: '50px', paddingTop: '10px' };
+  const signatureLine = { borderTop: '1px solid black', width: '40%', textAlign: 'center', fontSize: '10pt' };
 
-  // Handle case where data might not be ready yet (though LoanPage should ensure it is)
-  if (!loanDetails) {
-    return <div ref={ref}>Loading invoice data...</div>;
-  }
+  if (!loanDetails) return <div ref={ref}>Loading...</div>;
 
-  // Format currency consistently
-  const formatCurrency = (amount) => {
-      const num = parseFloat(amount);
-      if (isNaN(num)) return '₹ --';
-      return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  // Format dates consistently
-  const formatDate = (dateString) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-GB'); // dd/mm/yyyy format
-    } catch (e) {
-      return 'Invalid Date';
-    }
-  };
+  const formatDate = (d) => new Date(d).toLocaleDateString('en-GB');
+  const formatMoney = (m) => `₹${parseFloat(m || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   return (
-    // Use the ref on the outermost div that contains everything to be printed/captured
     <div ref={ref} style={containerStyle}>
-      <h2 style={headerStyle}>
-        PLEDGE INVOICE / RECEIPT
-      </h2>
+      {/* HEADER */}
+      <div style={headerStyle}>
+        <div style={titleStyle}>SRI KUBERA BANKERS</div>
+        <div style={subTitleStyle}>123 Main Bazaar, Salem, Tamil Nadu - 636001 | Phone: 9876543210</div>
+        <div style={{...subTitleStyle, fontWeight: 'bold', marginTop: '8px'}}>PLEDGE TICKET / LOAN RECEIPT</div>
+      </div>
 
-      <div style={flexBetween}>
-        <div>
-          <h4>Loan #{loanDetails.id}</h4>
-          <p style={{ margin: '2px 0' }}><strong>Book Loan #:</strong> {loanDetails.book_loan_number || 'N/A'}</p>
+      {/* INFO GRID */}
+      <div style={gridStyle}>
+        <div style={boxStyle}>
+          <span style={labelStyle}>LOAN DETAILS:</span>
+          <div><strong>Loan No:</strong> {loanDetails.book_loan_number || loanDetails.id}</div>
+          <div><strong>Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
+          <div><strong>Amount:</strong> {formatMoney(loanDetails.principal_amount)}</div>
+          <div><strong>Interest:</strong> {loanDetails.interest_rate}% p.m.</div>
         </div>
-        <div>
-          <p style={{ margin: '2px 0' }}><strong>Date:</strong> {formatDate(loanDetails.pledge_date)}</p>
-          <p style={{ margin: '2px 0' }}><strong>Due Date:</strong> {formatDate(loanDetails.due_date)}</p>
+        <div style={boxStyle}>
+          <span style={labelStyle}>CUSTOMER DETAILS:</span>
+          <div><strong>Name:</strong> {loanDetails.customer_name}</div>
+          <div><strong>Phone:</strong> {loanDetails.phone_number}</div>
+          <div><strong>Address:</strong> {loanDetails.address}</div>
         </div>
       </div>
 
-      <hr style={hrStyle} />
-
-      <h4 style={sectionTitleStyle}>Customer Details</h4>
-      <p style={{ margin: '2px 0' }}>
-        <strong>Name:</strong> {loanDetails.customer_name}<br />
-        <strong>Phone:</strong> {loanDetails.phone_number}<br/>
-        {loanDetails.address && <><strong>Address:</strong> {loanDetails.address}<br/></>}
-      </p>
-
-      <hr style={hrStyle} />
-
-      <h4 style={sectionTitleStyle}>Loan Details</h4>
-      <table style={tableStyle}>
-        <thead>
-          <tr>
-            <th style={thStyle}>Principal Amount</th>
-            <th style={thStyle}>Interest Rate (p.a.)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style={tdStyle}>{formatCurrency(loanDetails.principal_amount)}</td>
-            <td style={tdStyle}>{loanDetails.interest_rate}%</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h4 style={sectionTitleStyle}>Pledged Item(s)</h4>
+      {/* ITEM TABLE */}
+      <strong style={{textDecoration: 'underline'}}>PARTICULARS OF PLEDGED ARTICLES:</strong>
       <table style={tableStyle}>
         <thead>
           <tr>
             <th style={thStyle}>Description</th>
             <th style={thStyle}>Type</th>
-            <th style={thStyle}>Quality</th>
-            <th style={{...thStyle, textAlign: 'right'}}>Weight (g)</th>
+            <th style={thStyle}>Gross Wt (g)</th>
+            <th style={thStyle}>Net Wt (g)</th>
+            <th style={thStyle}>Purity</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td style={tdStyle}>{loanDetails.description || 'N/A'}</td>
-            <td style={tdStyle}>{loanDetails.item_type || 'N/A'}</td>
-            <td style={tdStyle}>{loanDetails.quality || 'N/A'}</td>
-            <td style={{...tdStyle, textAlign: 'right'}}>{loanDetails.weight ? `${loanDetails.weight}g` : 'N/A'}</td>
+            <td style={{...tdStyle, textAlign: 'left'}}>{loanDetails.description}</td>
+            <td style={tdStyle}>{loanDetails.item_type}</td>
+            <td style={tdStyle}>{loanDetails.gross_weight || loanDetails.weight || '-'}</td>
+            <td style={tdStyle}>{loanDetails.net_weight || '-'}</td>
+            <td style={tdStyle}>{loanDetails.purity || '-'}</td>
           </tr>
         </tbody>
       </table>
 
-      <div style={signatureSection}>
-        <p>Customer Signature: _________________________</p>
-        <br />
-        <p>Manager Signature: _________________________</p>
+      {/* DECLARATION */}
+      <div style={declarationStyle}>
+        <p><strong>Terms & Declaration:</strong></p>
+        <ol style={{paddingLeft: '20px', margin: '5px 0'}}>
+          <li>I am the absolute owner of the articles pledged above and they are free from any encumbrance.</li>
+          <li>I agree to pay the interest as mentioned above. If the interest is not paid for more than 12 months, the lender has the right to auction the pledged articles after due notice.</li>
+          <li>The net weight mentioned is approximate after deducting stone/dust weight.</li>
+          <li>I have received the principal amount in cash/bank transfer.</li>
+        </ol>
       </div>
 
-      <p style={footerStyle}>
-        Thank you for your business. | PledgeManager
-      </p>
+      {/* SIGNATURES */}
+      <div style={signatureRow}>
+        <div style={signatureLine}>
+          Signature of Borrower
+        </div>
+        <div style={signatureLine}>
+          For SRI KUBERA BANKERS
+          <br/><br/>
+          (Authorized Signatory)
+        </div>
+      </div>
     </div>
   );
 });

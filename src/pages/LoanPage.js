@@ -358,10 +358,41 @@ function LoanPage({ userRole }) {
                     </div>
                     {/* Pledged Item Card */}
                     <div className="card shadow-sm mb-4">
-                        <div className="card-header">Pledged Item</div>
-                        <div className="card-body d-flex align-items-start">
-                            {loanDetails.item_image_data_url && <img src={loanDetails.item_image_data_url} alt={loanDetails.description} style={{ maxWidth: '80px', maxHeight: '80px', marginRight: '15px', display: 'block', border: '1px solid #ddd', padding: '2px', borderRadius: '4px' }} />}
-                            <div><p className="mb-1"><strong>Description:</strong> {loanDetails.description} ({loanDetails.item_type})</p><p className="mb-0 text-muted"><strong>Quality:</strong> {loanDetails.quality || 'N/A'} | <strong>Weight:</strong> {loanDetails.weight ? `${loanDetails.weight}g` : 'N/A'}</p></div>
+                        <div className="card-header">Pledged Item Details</div>
+                        <div className="card-body">
+                            <div className="d-flex align-items-start">
+                                {loanDetails.item_image_data_url && (
+                                    <img 
+                                        src={loanDetails.item_image_data_url} 
+                                        alt="Item" 
+                                        className="rounded border p-1 me-3"
+                                        style={{ width: '100px', height: '100px', objectFit: 'cover' }} 
+                                    />
+                                )}
+                                <div className="flex-grow-1">
+                                    <h5 className="card-title mb-1">{loanDetails.description}</h5>
+                                    <span className="badge bg-info text-dark mb-3">{loanDetails.item_type?.toUpperCase()}</span>
+                                    
+                                    <div className="row g-2 small">
+                                        <div className="col-6">
+                                            <div className="text-muted">Gross Weight:</div>
+                                            <div className="fw-bold">{loanDetails.gross_weight || loanDetails.weight || '0'} g</div>
+                                        </div>
+                                        <div className="col-6">
+                                            <div className="text-muted">Net Weight:</div>
+                                            <div className="fw-bold">{loanDetails.net_weight || '0'} g</div>
+                                        </div>
+                                        <div className="col-6">
+                                            <div className="text-muted">Purity:</div>
+                                            <div className="fw-bold">{loanDetails.purity || 'N/A'}</div>
+                                        </div>
+                                        <div className="col-6">
+                                            <div className="text-muted">Appraised Value:</div>
+                                            <div className="fw-bold">{formatCurrency(loanDetails.appraised_value)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     {/* Amount Due Calculation Card */}
