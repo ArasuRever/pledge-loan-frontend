@@ -1,3 +1,4 @@
+// src/pages/LoanPage.js
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
@@ -7,60 +8,34 @@ import html2canvas from 'html2canvas';
 import PaymentForm from '../components/PaymentForm';
 import { PrintableInvoice } from '../components/PrintableInvoice';
 import LoanHistoryModal from '../components/LoanHistoryModal';
+import RenewLoanModal from '../components/RenewLoanModal'; // --- NEW IMPORT ---
 
 const API_URL = process.env.REACT_APP_API_URL; 
 
 // --- Modal Styles ---
 const modalOverlayStyle = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1050,
+    position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
+    justifyContent: 'center', alignItems: 'center', zIndex: 1050,
 };
 const modalContentStyle = {
-    backgroundColor: 'white',
-    padding: '20px',
-    borderRadius: '8px',
-    width: '80%',
-    maxWidth: '800px',
-    maxHeight: '85vh',
-    overflowY: 'auto',
-    border: '1px solid #ccc',
-    boxShadow: '0 5px 15px rgba(0, 0, 0, 0.2)',
+    backgroundColor: 'white', padding: '20px', borderRadius: '8px',
+    width: '80%', maxWidth: '800px', maxHeight: '85vh', overflowY: 'auto',
+    border: '1px solid #ccc', boxShadow: '0 5px 15px rgba(0, 0, 0, 0.2)',
 };
 const modalHeaderStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottom: '1px solid #eee',
-    paddingBottom: '10px',
-    marginBottom: '15px',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px',
 };
 const modalBodyStyle = { marginBottom: '20px' };
 const modalFooterStyle = {
-    borderTop: '1px solid #eee',
-    paddingTop: '15px',
-    textAlign: 'right',
+    borderTop: '1px solid #eee', paddingTop: '15px', textAlign: 'right',
 };
 const hiddenPrintComponentStyle = {
-    position: 'absolute',
-    overflow: 'hidden',
-    clip: 'rect(0 0 0 0)',
-    height: '1px',
-    width: '1px',
-    margin: '-1px',
-    padding: '0',
-    border: '0',
-    top: '-9999px',
-    left: '-9999px',
+    position: 'absolute', overflow: 'hidden', clip: 'rect(0 0 0 0)',
+    height: '1px', width: '1px', margin: '-1px', padding: '0', border: '0',
+    top: '-9999px', left: '-9999px',
 };
-// --- End Modal Styles ---
 
 // --- Helper Function: calculateInterestDetails ---
 const calculateInterestDetails = (loanDetails, transactions = []) => {
@@ -115,8 +90,8 @@ const calculateInterestDetails = (loanDetails, transactions = []) => {
             continue;
         };
         const monthsFactor = calculateTotalMonthsFactor(event.date, today);
-        event.monthsFactor = monthsFactor; // Store factor
-        event.accruedInterest = event.amount * monthlyInterestRateDecimal * monthsFactor; // Store interest
+        event.monthsFactor = monthsFactor; 
+        event.accruedInterest = event.amount * monthlyInterestRateDecimal * monthsFactor; 
         totalInterest += event.accruedInterest;
         if (event.isInitial) maxMonthsFactor = monthsFactor;
     }
@@ -130,7 +105,6 @@ const calculateInterestDetails = (loanDetails, transactions = []) => {
         disbursementEvents: disbursementEvents
     };
 };
-// --- End Helper Function: calculateInterestDetails ---
 
 // --- Main Component ---
 function LoanPage({ userRole }) {
@@ -145,6 +119,7 @@ function LoanPage({ userRole }) {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showPrintModal, setShowPrintModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false); 
+    const [showRenewModal, setShowRenewModal] = useState(false); // --- NEW STATE ---
     const [additionalAmount, setAdditionalAmount] = useState('');
     const [calculatedInterest, setCalculatedInterest] = useState(0);
     const [calculatedMonths, setCalculatedMonths] = useState(0);
@@ -155,7 +130,7 @@ function LoanPage({ userRole }) {
     // --- Ref ---
     const invoiceRef = useRef();
     
-    // --- Handlers (Print, PDF, Settle, Add Principal, Delete) ---
+    // --- Handlers ---
     const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false), onPrintError: (err) => { console.error("Print Error:", err); alert("Printing failed."); setShowPrintModal(false); } });
     
     const handleSavePdf = async () => { 
@@ -166,22 +141,11 @@ function LoanPage({ userRole }) {
         if (!parentDiv) { console.error("PDF Error: Parent missing."); alert("PDF Error: Parent missing."); setShowPrintModal(false); return; }
         
         try {
-            // Preserve original styles and apply temporary ones for correct capture
             originalParentStyle = { position: parentDiv.style.position, overflow: parentDiv.style.overflow, clip: parentDiv.style.clip, height: parentDiv.style.height, width: parentDiv.style.width, margin: parentDiv.style.margin, padding: parentDiv.style.padding, border: parentDiv.style.border, whiteSpace: parentDiv.style.whiteSpace, visibility: parentDiv.style.visibility, top: parentDiv.style.top, left: parentDiv.style.left, };
             Object.assign(parentDiv.style, { position: 'absolute', top: '0', left: '0', visibility: 'visible', height: 'auto', width: 'auto', overflow: 'visible', clip: 'auto', margin: '0', padding: '0', border: 'none', whiteSpace: 'normal', backgroundColor: '#ffffff' });
-            
-            await new Promise(resolve => setTimeout(resolve, 150)); // Wait for styles to apply
+            await new Promise(resolve => setTimeout(resolve, 150)); 
 
-            const canvas = await html2canvas(elementToCapture, { 
-                scale: 2, 
-                useCORS: true, 
-                logging: true, 
-                backgroundColor: '#ffffff', 
-                width: elementToCapture.scrollWidth, 
-                height: elementToCapture.scrollHeight 
-            });
-            
-            // Restore original styles
+            const canvas = await html2canvas(elementToCapture, { scale: 2, useCORS: true, logging: true, backgroundColor: '#ffffff', width: elementToCapture.scrollWidth, height: elementToCapture.scrollHeight });
             Object.assign(parentDiv.style, originalParentStyle);
             
             const imgData = canvas.toDataURL('image/png'); 
@@ -214,19 +178,14 @@ function LoanPage({ userRole }) {
     
     const handleSettleAndClose = async () => { 
         const discountValue = parseFloat(discount) || 0;
-        const currentBalanceValue = currentBalance; // Use calculated balance from render logic
-        
+        const currentBalanceValue = currentBalance; 
         if (currentBalanceValue - discountValue > 0.01) {
             alert(`Settlement failed: The final amount due is ${formatCurrency(currentBalanceValue - discountValue)}. The balance must be ≤ ₹0.01 to close the loan.`);
             return;
         }
-
         if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}. Proceed?`)) {
             try { 
-                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { 
-                    discountAmount: discountValue,
-                    settlementAmount: currentBalanceValue - discountValue // Pass the amount expected to settle
-                }); 
+                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue, settlementAmount: currentBalanceValue - discountValue }); 
                 alert(response.data.message); 
                 setRefreshTrigger(t => t + 1); 
             }
@@ -260,7 +219,7 @@ function LoanPage({ userRole }) {
         try {
           const response = await axios.delete(`${API_URL}/api/loans/${id}`);
           alert(response.data.message);
-          navigate(`/customers/${loanData.loanDetails.customer_id}`); // Go to customer page
+          navigate(`/customers/${loanData.loanDetails.customer_id}`);
         } catch (err) {
           const errorMsg = err.response?.data?.error || "Failed to delete loan.";
           console.error("Delete Loan Error:", err);
@@ -268,7 +227,6 @@ function LoanPage({ userRole }) {
         }
       }
     };
-    // --- End Handlers ---
 
     // Fetch Loan Data & Calculate Interest
     useEffect(() => {
@@ -292,7 +250,7 @@ function LoanPage({ userRole }) {
             } finally { setIsLoading(false); }
         };
         fetchLoanData();
-    }, [id, refreshTrigger]);
+    }, [id, refreshTrigger, API_URL]);
 
     // Render Logic
     if (isLoading) return <div className="text-center mt-5">Loading loan details...</div>;
@@ -318,6 +276,15 @@ function LoanPage({ userRole }) {
                     <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => setShowHistoryModal(true)}>
                         View History
                     </button>
+                    
+                    {/* --- RENEW BUTTON (NEW) --- */}
+                    {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
+                        <button className="btn btn-success btn-sm me-2" onClick={() => setShowRenewModal(true)}>
+                             <i className="bi bi-arrow-repeat me-1"></i> Renew
+                        </button>
+                    )}
+                    {/* --- END RENEW BUTTON --- */}
+
                     <Link to={`/loans/${id}/edit`} className="btn btn-warning btn-sm me-2">
                         Edit Loan
                     </Link>
@@ -348,7 +315,7 @@ function LoanPage({ userRole }) {
                         <div className="card-body">
                             <div className="row">
                                 <div className="col-md-6 mb-2"><strong>Book Loan #:</strong> {loanDetails.book_loan_number}</div>
-                                <div className="col-md-6 mb-2"><strong>Status:</strong> <span className={`badge bg-${loanDetails.status === 'overdue' ? 'danger' : loanDetails.status === 'paid' ? 'secondary' : 'success'}`}>{loanDetails.status}</span></div>
+                                <div className="col-md-6 mb-2"><strong>Status:</strong> <span className={`badge bg-${loanDetails.status === 'overdue' ? 'danger' : loanDetails.status === 'paid' ? 'secondary' : loanDetails.status === 'renewed' ? 'info text-dark' : 'success'}`}>{loanDetails.status}</span></div>
                                 <div className="col-md-6 mb-2"><strong>Principal:</strong> {formatCurrency(loanDetails.principal_amount)}</div>
                                 <div className="col-md-6 mb-2"><strong>Interest Rate:</strong> {loanDetails.interest_rate}% p.m.</div>
                                 <div className="col-md-6 mb-2"><strong>Pledge Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
@@ -356,7 +323,7 @@ function LoanPage({ userRole }) {
                             </div>
                         </div>
                     </div>
-                    {/* Pledged Item Card */}
+                    {/* Pledged Item Card (UPDATED for Indian Pledge System) */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Pledged Item Details</div>
                         <div className="card-body">
@@ -395,6 +362,7 @@ function LoanPage({ userRole }) {
                             </div>
                         </div>
                     </div>
+
                     {/* Amount Due Calculation Card */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                         <div className="card shadow-sm mb-4 border-success">
@@ -473,7 +441,6 @@ function LoanPage({ userRole }) {
                             <div className="card-header bg-warning text-dark">Payments & Settlement</div> 
                             <div className="card-body"> 
                                 <div className="mb-4">
-                                    {/* Assumes PaymentForm component is correctly imported and defined */}
                                     <PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} />
                                 </div> 
                                 <hr className="my-3"/> 
@@ -545,7 +512,6 @@ function LoanPage({ userRole }) {
                             <button type="button" className="btn-close" onClick={() => setShowPrintModal(false)} aria-label="Close"></button>
                         </div>
                         <div style={modalBodyStyle}>
-                            {/* Assumes PrintableInvoice component is correctly imported and defined */}
                             {loanDetails && <PrintableInvoice loanDetails={loanDetails} />}
                         </div>
                         <div style={modalFooterStyle}>
@@ -560,6 +526,19 @@ function LoanPage({ userRole }) {
             {/* Loan History Modal */}
             {showHistoryModal && (
                 <LoanHistoryModal loanId={id} onClose={() => setShowHistoryModal(false)} />
+            )}
+
+            {/* --- NEW: Renew Loan Modal --- */}
+            {showRenewModal && (
+                <RenewLoanModal 
+                    loan={loanDetails}
+                    outstandingInterest={calculatedInterest}
+                    onClose={() => setShowRenewModal(false)} 
+                    onRenewalSuccess={(newLoanId) => {
+                        setShowRenewModal(false);
+                        navigate(`/loans/${newLoanId}`); // Auto-redirect to new loan
+                    }} 
+                />
             )}
 
             {/* Hidden Print Component */}

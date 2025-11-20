@@ -195,7 +195,8 @@ const CustomerPage = ({ userRole }) => {
                                 <td>
                                     <span className={`badge rounded-pill bg-${
                                         loan.status === 'active' ? 'success' : 
-                                        loan.status === 'overdue' ? 'danger' : 
+                                        loan.status === 'overdue' ? 'danger' :
+                                        loan.status === 'renewed' ? 'info text-dark' : 
                                         loan.status === 'paid' ? 'secondary' : 'warning'
                                     } px-3 py-2`}>
                                         {loan.status.toUpperCase()}
