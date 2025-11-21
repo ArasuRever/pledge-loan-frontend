@@ -9,37 +9,39 @@ const SettingsPage = () => {
     address: '',
     phone_number: '',
     license_number: '',
-    existingLogoUrl: ''
+    existingLogoUrl: '',
+    navbar_display_mode: 'both'
   });
   const [logoFile, setLogoFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // --- FIX: Defined fetchSettings INSIDE useEffect to remove warning ---
   useEffect(() => {
-    fetchSettings();
-    // eslint-disable-next-line
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/api/settings`);
-      if (res.data) {
-        setFormData({
-          business_name: res.data.business_name || '',
-          address: res.data.address || '',
-          phone_number: res.data.phone_number || '',
-          license_number: res.data.license_number || '',
-          existingLogoUrl: res.data.logo_url || ''
-        });
-        if (res.data.logo_url) setPreviewUrl(res.data.logo_url);
+    const fetchSettings = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/settings`);
+        if (res.data) {
+          setFormData({
+            business_name: res.data.business_name || '',
+            address: res.data.address || '',
+            phone_number: res.data.phone_number || '',
+            license_number: res.data.license_number || '',
+            existingLogoUrl: res.data.logo_url || '',
+            navbar_display_mode: res.data.navbar_display_mode || 'both'
+          });
+          if (res.data.logo_url) setPreviewUrl(res.data.logo_url);
+        }
+      } catch (err) {
+        console.error("Error fetching settings:", err);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Error fetching settings:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchSettings();
+  }, [API_URL]); // Added API_URL as dependency (good practice)
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -58,7 +60,8 @@ const SettingsPage = () => {
     data.append('address', formData.address);
     data.append('phone_number', formData.phone_number);
     data.append('license_number', formData.license_number);
-    data.append('existingLogoUrl', formData.existingLogoUrl); // Send old URL just in case
+    data.append('existingLogoUrl', formData.existingLogoUrl);
+    data.append('navbar_display_mode', formData.navbar_display_mode);
 
     if (logoFile) {
       data.append('logo', logoFile);
@@ -69,8 +72,7 @@ const SettingsPage = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert("Business settings updated successfully!");
-      // Optional: Force reload to update Navbar logo immediately
-      window.location.reload();
+      window.location.reload(); 
     } catch (err) {
       alert("Failed to save settings.");
       console.error(err);
@@ -79,7 +81,7 @@ const SettingsPage = () => {
     }
   };
 
-  if (loading) return <div className="text-center mt-5">Loading...</div>;
+  if (loading) return <div className="text-center mt-5"><div className="spinner-border text-primary"></div></div>;
 
   return (
     <div className="container mt-4" style={{maxWidth: '800px'}}>
@@ -91,6 +93,47 @@ const SettingsPage = () => {
         </div>
         <div className="card-body p-4">
            <form onSubmit={handleSubmit}>
+              
+              {/* --- NAVBAR DISPLAY OPTIONS --- */}
+              <div className="mb-4 p-3 bg-light rounded border">
+                <label className="form-label fw-bold mb-2">Navbar Display Style</label>
+                <div className="d-flex gap-3">
+                  <div className="form-check">
+                    <input 
+                      className="form-check-input" 
+                      type="radio" 
+                      name="displayMode" 
+                      id="modeBoth"
+                      checked={formData.navbar_display_mode === 'both'}
+                      onChange={() => setFormData({...formData, navbar_display_mode: 'both'})}
+                    />
+                    <label className="form-check-label" htmlFor="modeBoth">Show Both</label>
+                  </div>
+                  <div className="form-check">
+                    <input 
+                      className="form-check-input" 
+                      type="radio" 
+                      name="displayMode" 
+                      id="modeLogo"
+                      checked={formData.navbar_display_mode === 'logo_only'}
+                      onChange={() => setFormData({...formData, navbar_display_mode: 'logo_only'})}
+                    />
+                    <label className="form-check-label" htmlFor="modeLogo">Logo Only</label>
+                  </div>
+                  <div className="form-check">
+                    <input 
+                      className="form-check-input" 
+                      type="radio" 
+                      name="displayMode" 
+                      id="modeName"
+                      checked={formData.navbar_display_mode === 'name_only'}
+                      onChange={() => setFormData({...formData, navbar_display_mode: 'name_only'})}
+                    />
+                    <label className="form-check-label" htmlFor="modeName">Name Only</label>
+                  </div>
+                </div>
+              </div>
+
               {/* Logo Section */}
               <div className="mb-4 text-center">
                   <div className="mb-2">
@@ -124,7 +167,6 @@ const SettingsPage = () => {
                         className="form-control" 
                         value={formData.license_number} 
                         onChange={e => setFormData({...formData, license_number: e.target.value})} 
-                        placeholder="e.g. TN/SAL/12345"
                       />
                   </div>
                   <div className="col-md-6">
