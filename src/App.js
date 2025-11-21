@@ -19,6 +19,7 @@ import ManageStaffPage from './pages/ManageStaffPage';
 import RecycleBinPage from './pages/RecycleBinPage'; 
 import DayBookPage from './pages/DayBookPage';
 import ReportsPage from './pages/ReportsPage';
+import SettingsPage from './pages/SettingsPage';
 
 import Navbar from './components/Navbar';
 
@@ -97,6 +98,7 @@ function App() {
           <Route path="/recycle-bin" element={<ProtectedRoute><RecycleBinPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/day-book" element={<ProtectedRoute><DayBookPage /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><ReportsPage userRole={user?.role} /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><SettingsPage userRole={user?.role} /></ProtectedRoute>} />
 
            <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
         </Routes>

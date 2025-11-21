@@ -118,6 +118,9 @@ function Navbar({ user, onLogout }) {
                 <li className="nav-item">
                     <Link className="nav-link" to="/manage-staff">Manage Staff</Link>
                 </li>
+                <li className="nav-item">
+                    <Link className="nav-link" to="/settings">Settings</Link>
+                </li>
               </>
             )}
           </ul>
