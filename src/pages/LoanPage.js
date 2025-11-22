@@ -12,7 +12,6 @@ import RenewLoanModal from '../components/RenewLoanModal';
 
 const API_URL = process.env.REACT_APP_API_URL; 
 
-// --- Modal Styles (Restored to Original Clean Look) ---
 const modalOverlayStyle = {
     position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
     backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
@@ -32,21 +31,11 @@ const modalFooterStyle = {
     borderTop: '1px solid #eee', paddingTop: '15px', textAlign: 'right',
 };
 
-// --- FIX: Hidden Style for PDF Generation ---
-// Instead of shrinking it to 1px (which makes PDF blank), we place it behind the content.
 const hiddenPrintComponentStyle = {
-    position: 'fixed', 
-    top: 0, 
-    left: 0,
-    width: '210mm', // Exact A4 width
-    minHeight: '297mm', // Exact A4 height
-    zIndex: -1000, // Hide behind everything
-    opacity: 0,   // Make invisible
-    pointerEvents: 'none', // Prevent interaction
-    backgroundColor: 'white'
+    position: 'fixed', top: 0, left: 0, width: '210mm', minHeight: '297mm',
+    zIndex: -1000, opacity: 0, pointerEvents: 'none', backgroundColor: 'white'
 };
 
-// --- Helper Function: calculateInterestDetails ---
 const calculateInterestDetails = (loanDetails, transactions = []) => {
     if (!loanDetails || !loanDetails.pledge_date || !loanDetails.principal_amount || !loanDetails.interest_rate || loanDetails.status === 'paid' || loanDetails.status === 'forfeited') {
         return { totalInterest: 0, totalMonthsFactor: 0, rateUsed: parseFloat(loanDetails?.interest_rate || 0), totalOwed: parseFloat(loanDetails?.principal_amount || 0), disbursementEvents: [] };
@@ -119,7 +108,6 @@ function LoanPage({ userRole }) {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    // --- State ---
     const [loanData, setLoanData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -136,71 +124,35 @@ function LoanPage({ userRole }) {
     const [disbursementDetails, setDisbursementDetails] = useState([]); 
 
     const invoiceRef = useRef();
-    
-    // --- Handlers ---
     const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false) });
     
-    // --- UPDATED PDF HANDLER ---
     const handleSavePdf = async () => { 
         if (!invoiceRef.current) return alert("PDF Error: Invoice Reference missing.");
-        
-        // 1. Clone the invoice element
         const originalElement = invoiceRef.current;
         const clone = originalElement.cloneNode(true);
-        
-        // 2. Style the clone to force A4 size and visibility
-        // We place it in a container that allows it to expand fully
         const container = document.createElement('div');
-        container.style.position = 'fixed';
-        container.style.top = '-10000px'; // Move off-screen
-        container.style.left = '0';
-        container.style.zIndex = '-1000';
+        container.style.position = 'fixed'; container.style.top = '-10000px'; container.style.left = '0'; container.style.zIndex = '-1000';
         container.appendChild(clone);
         document.body.appendChild(container);
-        
         try {
-            // 3. Capture the clone
-            const canvas = await html2canvas(clone, { 
-                scale: 2, // High resolution
-                useCORS: true, 
-                logging: false, 
-                backgroundColor: '#ffffff',
-                windowWidth: 1200 // Pretend we are on a large screen
-            });
-            
-            // 4. Generate PDF
+            const canvas = await html2canvas(clone, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', windowWidth: 1200 });
             const imgData = canvas.toDataURL('image/png'); 
             const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' }); 
-            
-            // A4 size: 210mm x 297mm
-            const pdfWidth = 210;
-            const pdfHeight = 297;
-            
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
             pdf.save(`Loan-Invoice-${id}.pdf`); 
-            
-            // 5. Cleanup
             document.body.removeChild(container);
             setShowPrintModal(false);
-
         } catch (err) { 
-            console.error("PDF Generation Error:", err); 
-            alert("PDF Generation Failed."); 
+            console.error("PDF Generation Error:", err); alert("PDF Generation Failed."); 
             if (document.body.contains(container)) document.body.removeChild(container);
         }
     };
     
     const handleSettleAndClose = async () => { 
         const discountValue = parseFloat(discount) || 0;
-        const currentBalanceValue = currentBalance; 
-        if (currentBalanceValue - discountValue > 0.01) {
-            alert(`Settlement failed: Balance must be ≤ 0. Current: ${formatCurrency(currentBalanceValue - discountValue)}`);
-            return;
-        }
-        
         if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}?`)) {
             try { 
-                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue, settlementAmount: currentBalanceValue - discountValue }); 
+                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue, settlementAmount: currentBalance - discountValue }); 
                 alert(response.data.message); 
                 setRefreshTrigger(t => t + 1); 
             } catch (err) { 
@@ -260,7 +212,9 @@ function LoanPage({ userRole }) {
     if (!loanData?.loanDetails) return <div className="alert alert-warning">Loan data missing.</div>;
 
     const { loanDetails, transactions } = loanData;
-    const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement') || [];
+    
+    // --- FIX: Separate Discount from Cash Payments ---
+    const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement' && tx.payment_type !== 'discount') || [];
     const disbursementsMade = transactions?.filter(tx => tx.payment_type === 'disbursement') || [];
     const totalPaid = paymentsReceived.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
     const currentBalance = calculatedTotalOwed - totalPaid;
@@ -269,25 +223,79 @@ function LoanPage({ userRole }) {
     const formatDate = (date) => new Date(date).toLocaleDateString('en-IN'); 
     const isDeletable = loanDetails.status === 'paid' || loanDetails.status === 'forfeited' || loanDetails.status === 'renewed';
 
+    // --- NEW: Settlement Summary Helper ---
+    const _buildSettlementSummary = () => {
+        if (loanDetails.status !== 'paid') return null;
+
+        const allTxs = transactions || [];
+        const disbTxs = allTxs.filter(t => t.payment_type === 'disbursement');
+        const payTxs = allTxs.filter(t => ['interest', 'principal', 'settlement'].includes(t.payment_type));
+        const discountTxs = allTxs.filter(t => t.payment_type === 'discount');
+
+        const totalPrincipal = disbTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
+        const totalCashPaid = payTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
+        const totalDiscount = discountTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
+        
+        // Derived Interest = (Cash + Discount) - Principal
+        const totalInterestGenerated = (totalCashPaid + totalDiscount) - totalPrincipal;
+
+        return (
+            <div className="card shadow-sm mb-4 border-success">
+                <div className="card-header bg-success text-white">
+                    <i className="bi bi-check-circle-fill me-2"></i>
+                    Settlement Summary (Closed)
+                </div>
+                <div className="card-body">
+                    <table className="table table-borderless table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td>Total Principal Disbursed</td>
+                                <td className="text-end">{formatCurrency(totalPrincipal)}</td>
+                            </tr>
+                            <tr>
+                                <td>+ Interest & Charges</td>
+                                <td className="text-end">{formatCurrency(totalInterestGenerated)}</td>
+                            </tr>
+                            <tr className="border-top">
+                                <td className="fw-bold">Total Payable Amount</td>
+                                <td className="text-end fw-bold">{formatCurrency(totalPrincipal + totalInterestGenerated)}</td>
+                            </tr>
+                            <tr>
+                                <td className="text-success">- Total Cash Paid</td>
+                                <td className="text-end text-success">-{formatCurrency(totalCashPaid)}</td>
+                            </tr>
+                            {totalDiscount > 0 && (
+                                <tr>
+                                    <td className="text-danger">- Discount / Waiver</td>
+                                    <td className="text-end text-danger">-{formatCurrency(totalDiscount)}</td>
+                                </tr>
+                            )}
+                            <tr className="border-top border-2">
+                                <td className="fw-bold">Outstanding Balance</td>
+                                <td className="text-end fw-bold">₹0.00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div className="text-center mt-3 small text-muted">
+                        <i className="bi bi-calendar-check me-1"></i>
+                        Loan settled on {loanDetails.closed_date ? formatDate(loanDetails.closed_date) : 'N/A'}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="container-fluid pt-3">
-            {/* Page Header */}
             <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
                 <h2>Loan Details (ID: {loanDetails.id})</h2>
                 <div>
                     <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => setShowHistoryModal(true)}>View History</button>
-                    
-                    {/* Renew Button */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
-                        <button className="btn btn-success btn-sm me-2" onClick={() => setShowRenewModal(true)}>
-                             <i className="bi bi-arrow-repeat me-1"></i> Renew
-                        </button>
+                        <button className="btn btn-success btn-sm me-2" onClick={() => setShowRenewModal(true)}><i className="bi bi-arrow-repeat me-1"></i> Renew</button>
                     )}
-
                     <Link to={`/loans/${id}/edit`} className="btn btn-warning btn-sm me-2">Edit Loan</Link>
-                    
                     <button className="btn btn-info btn-sm" onClick={() => setShowPrintModal(true)}>Print / Save Invoice</button>
-                    
                     {userRole === 'admin' && isDeletable && (
                         <button className="btn btn-danger btn-sm ms-2" onClick={handleDeleteLoan}><i className="bi bi-trash"></i></button>
                     )}
@@ -295,27 +303,15 @@ function LoanPage({ userRole }) {
             </div>
 
             <div className="row g-4"> 
-                {/* Left Column: Details */}
                 <div className="col-lg-8">
                     {/* Customer Info */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Customer Information</div>
                         <div className="card-body d-flex align-items-center">
-                            {/* ... image logic ... */}
                             <div>
-                                <h5>
-                                    <Link to={`/customers/${loanDetails.customer_id}`}>
-                                        {loanDetails.customer_name}
-                                    </Link>
-                                </h5>
-                                <p className="mb-0 text-muted">
-                                    <i className="bi bi-telephone me-1"></i> {loanDetails.phone_number}
-                                </p>
-                                {/* --- FIX: Display Address --- */}
-                                <p className="mb-0 text-muted small mt-1">
-                                    <i className="bi bi-geo-alt me-1"></i> 
-                                    {loanDetails.address ? loanDetails.address : <span className="fst-italic">No address on file</span>}
-                                </p>
+                                <h5><Link to={`/customers/${loanDetails.customer_id}`}>{loanDetails.customer_name}</Link></h5>
+                                <p className="mb-0 text-muted"><i className="bi bi-telephone me-1"></i> {loanDetails.phone_number}</p>
+                                <p className="mb-0 text-muted small mt-1"><i className="bi bi-geo-alt me-1"></i> {loanDetails.address ? loanDetails.address : <span className="fst-italic">No address on file</span>}</p>
                             </div>
                         </div>
                     </div>
@@ -326,17 +322,7 @@ function LoanPage({ userRole }) {
                         <div className="card-body">
                             <div className="row">
                                 <div className="col-md-6 mb-2"><strong>Book Loan #:</strong> {loanDetails.book_loan_number}</div>
-                                <div className="col-md-6 mb-2">
-                                    <strong>Status:</strong> 
-                                    <span className={`badge bg-${
-                                        loanDetails.status === 'overdue' ? 'danger' : 
-                                        loanDetails.status === 'paid' ? 'secondary' : 
-                                        loanDetails.status === 'renewed' ? 'info text-dark' : 
-                                        'success'
-                                    } ms-2`}>
-                                        {loanDetails.status.toUpperCase()}
-                                    </span>
-                                </div>
+                                <div className="col-md-6 mb-2"><strong>Status:</strong> <span className={`badge bg-${loanDetails.status === 'overdue' ? 'danger' : loanDetails.status === 'paid' ? 'secondary' : loanDetails.status === 'renewed' ? 'info text-dark' : 'success'} ms-2`}>{loanDetails.status.toUpperCase()}</span></div>
                                 <div className="col-md-6 mb-2"><strong>Principal:</strong> {formatCurrency(loanDetails.principal_amount)}</div>
                                 <div className="col-md-6 mb-2"><strong>Rate:</strong> {loanDetails.interest_rate}% p.m.</div>
                                 <div className="col-md-6 mb-2"><strong>Pledge Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
@@ -351,12 +337,7 @@ function LoanPage({ userRole }) {
                         <div className="card-body">
                             <div className="d-flex align-items-start">
                                 {loanDetails.item_image_data_url && (
-                                    <img 
-                                        src={loanDetails.item_image_data_url} 
-                                        alt="Item" 
-                                        className="rounded border p-1 me-3"
-                                        style={{ width: '100px', height: '100px', objectFit: 'cover' }} 
-                                    />
+                                    <img src={loanDetails.item_image_data_url} alt="Item" className="rounded border p-1 me-3" style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
                                 )}
                                 <div className="flex-grow-1">
                                     <h5 className="card-title mb-1">{loanDetails.description}</h5>
@@ -372,7 +353,7 @@ function LoanPage({ userRole }) {
                         </div>
                     </div>
 
-                    {/* Amount Due */}
+                    {/* Amount Due (Only Active) */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                         <div className="card shadow-sm mb-4 border-success">
                             <div className="card-header bg-success text-white">Amount Due Calculation (as of today)</div>
@@ -389,7 +370,7 @@ function LoanPage({ userRole }) {
                         </div>
                     )}
 
-                    {/* Interest Breakdown */}
+                    {/* Interest Breakdown (Only Active) */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && disbursementDetails.length > 0 && (
                         <div className="card shadow-sm mb-4 border-info">
                             <div className="card-header bg-info text-dark">Detailed Interest Breakdown</div>
@@ -419,7 +400,6 @@ function LoanPage({ userRole }) {
 
                 {/* Right Column: Actions */}
                 <div className="col-lg-4">
-                    {/* Disburse More */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( 
                         <div className="card border-info shadow-sm mb-4"> 
                             <div className="card-header bg-info text-dark">Disburse More Principal</div> 
@@ -432,7 +412,6 @@ function LoanPage({ userRole }) {
                         </div> 
                     )}
                     
-                    {/* Payments */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( 
                         <div className="card border-warning shadow-sm mb-4"> 
                             <div className="card-header bg-warning text-dark">Payments & Settlement</div> 
@@ -452,13 +431,12 @@ function LoanPage({ userRole }) {
                         </div> 
                     )}
                     
-                    {/* Transaction History */}
                     <div className="card shadow-sm mb-4">
                         <div className="card-header">Transaction History</div>
                         <div className="card-body">
                             <div className="row">
                                 <div className="col-6 border-end pe-2">
-                                    <h6>Payments Received</h6>
+                                    <h6>Payments</h6>
                                     {paymentsReceived.length > 0 ? (
                                         <ul className="list-unstyled small mb-0">
                                             {paymentsReceived.map(tx => (
@@ -486,12 +464,15 @@ function LoanPage({ userRole }) {
                             </div>
                         </div>
                     </div>
+
+                    {/* --- NEW: Settlement Summary (Only Paid) --- */}
+                    {_buildSettlementSummary()}
+
                 </div> 
             </div> 
 
             <div className="mt-3"><Link to={`/customers/${loanDetails.customer_id}`} className="btn btn-secondary btn-sm">Back to Customer</Link></div>
 
-            {/* Preview Modal */}
             {showPrintModal && (
                 <div style={modalOverlayStyle}>
                     <div style={modalContentStyle}>
@@ -500,7 +481,6 @@ function LoanPage({ userRole }) {
                             <button type="button" className="btn-close" onClick={() => setShowPrintModal(false)}></button>
                         </div>
                         <div style={modalBodyStyle}>
-                            {/* Ensure PrintableInvoice is rendered nicely inside */}
                             <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
                                 <div style={{ border: '1px solid #ddd', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', padding: '10px' }}>
                                     {loanDetails && <PrintableInvoice loanDetails={loanDetails} />}
@@ -530,7 +510,6 @@ function LoanPage({ userRole }) {
                 />
             )}
 
-            {/* Hidden Component for PDF Generation - FIXED */}
             <div style={hiddenPrintComponentStyle}>
                 {loanDetails && <PrintableInvoice ref={invoiceRef} loanDetails={loanDetails} />}
             </div>
