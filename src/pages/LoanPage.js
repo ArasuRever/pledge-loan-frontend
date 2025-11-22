@@ -12,6 +12,7 @@ import RenewLoanModal from '../components/RenewLoanModal';
 
 const API_URL = process.env.REACT_APP_API_URL; 
 
+// --- Modal Styles ---
 const modalOverlayStyle = {
     position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
     backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
@@ -36,6 +37,7 @@ const hiddenPrintComponentStyle = {
     zIndex: -1000, opacity: 0, pointerEvents: 'none', backgroundColor: 'white'
 };
 
+// --- Helper Function: calculateInterestDetails ---
 const calculateInterestDetails = (loanDetails, transactions = []) => {
     if (!loanDetails || !loanDetails.pledge_date || !loanDetails.principal_amount || !loanDetails.interest_rate || loanDetails.status === 'paid' || loanDetails.status === 'forfeited') {
         return { totalInterest: 0, totalMonthsFactor: 0, rateUsed: parseFloat(loanDetails?.interest_rate || 0), totalOwed: parseFloat(loanDetails?.principal_amount || 0), disbursementEvents: [] };
@@ -111,7 +113,11 @@ function LoanPage({ userRole }) {
     const [loanData, setLoanData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [discount, setDiscount] = useState('');
+    
+    // Settlement State
+    const [settleAmount, setSettleAmount] = useState('');
+    const [settleDiscount, setSettleDiscount] = useState('');
+    
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showPrintModal, setShowPrintModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false); 
@@ -124,6 +130,7 @@ function LoanPage({ userRole }) {
     const [disbursementDetails, setDisbursementDetails] = useState([]); 
 
     const invoiceRef = useRef();
+    
     const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false) });
     
     const handleSavePdf = async () => { 
@@ -147,13 +154,59 @@ function LoanPage({ userRole }) {
             if (document.body.contains(container)) document.body.removeChild(container);
         }
     };
+
+    // --- HELPER: Get Live Balance for Inputs ---
+    const getLiveBalance = () => {
+        if (!loanData?.loanDetails) return 0;
+        const { transactions } = loanData;
+        const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement' && tx.payment_type !== 'discount') || [];
+        const totalPaid = paymentsReceived.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
+        return calculatedTotalOwed - totalPaid;
+    };
+
+    // --- UPDATED: Auto-Calculate Inputs ---
+    const handleSettleAmountInput = (val) => {
+        setSettleAmount(val);
+        const balance = getLiveBalance();
+        const pay = parseFloat(val) || 0;
+        // If user pays X, remaining (Balance - X) must be waiver
+        const disc = Math.max(0, balance - pay); 
+        // Only update if valid number
+        if (val === '') setSettleDiscount(''); 
+        else setSettleDiscount(disc.toFixed(2));
+    };
+
+    const handleDiscountInput = (val) => {
+        setSettleDiscount(val);
+        const balance = getLiveBalance();
+        const disc = parseFloat(val) || 0;
+        // If user waives X, they must pay (Balance - X)
+        const pay = Math.max(0, balance - disc);
+        if (val === '') setSettleAmount('');
+        else setSettleAmount(pay.toFixed(2));
+    };
     
     const handleSettleAndClose = async () => { 
-        const discountValue = parseFloat(discount) || 0;
-        if (window.confirm(`Settle this loan with a discount of ₹${discountValue.toFixed(2)}?`)) {
+        const payAmount = parseFloat(settleAmount) || 0;
+        const discAmount = parseFloat(settleDiscount) || 0;
+        
+        const currentBalance = getLiveBalance();
+        const remaining = currentBalance - (payAmount + discAmount);
+
+        if (remaining > 0.5) {
+            alert(`Insufficient Settlement.\n\nOutstanding: ${formatCurrency(currentBalance)}\nPayment + Discount: ${formatCurrency(payAmount + discAmount)}\nStill Due: ${formatCurrency(remaining)}`);
+            return;
+        }
+        
+        if (window.confirm(`Confirm Settlement?\n\nCash Payment: ${formatCurrency(payAmount)}\nDiscount: ${formatCurrency(discAmount)}\n\nThis will CLOSE the loan.`)) {
             try { 
-                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { discountAmount: discountValue, settlementAmount: currentBalance - discountValue }); 
+                const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { 
+                    settlementAmount: payAmount, 
+                    discountAmount: discAmount 
+                }); 
                 alert(response.data.message); 
+                setSettleAmount('');
+                setSettleDiscount('');
                 setRefreshTrigger(t => t + 1); 
             } catch (err) { 
                 alert(err.response?.data?.error || 'Settle failed.'); 
@@ -213,7 +266,7 @@ function LoanPage({ userRole }) {
 
     const { loanDetails, transactions } = loanData;
     
-    // --- FIX: Separate Discount from Cash Payments ---
+    // Display Variables
     const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement' && tx.payment_type !== 'discount') || [];
     const disbursementsMade = transactions?.filter(tx => tx.payment_type === 'disbursement') || [];
     const totalPaid = paymentsReceived.reduce((sum, tx) => sum + parseFloat(tx.amount_paid || 0), 0);
@@ -221,23 +274,20 @@ function LoanPage({ userRole }) {
 
     const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const formatDate = (date) => new Date(date).toLocaleDateString('en-IN'); 
-    const isDeletable = loanDetails.status === 'paid' || loanDetails.status === 'forfeited' || loanDetails.status === 'renewed';
-
-    // --- NEW: Settlement Summary Helper ---
-    const _buildSettlementSummary = () => {
+    
+    // Settlement Summary Widget
+    const renderSettlementSummary = () => {
         if (loanDetails.status !== 'paid') return null;
 
         const allTxs = transactions || [];
-        const disbTxs = allTxs.filter(t => t.payment_type === 'disbursement');
         const payTxs = allTxs.filter(t => ['interest', 'principal', 'settlement'].includes(t.payment_type));
         const discountTxs = allTxs.filter(t => t.payment_type === 'discount');
 
-        const totalPrincipal = disbTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
+        const totalPrincipal = parseFloat(loanDetails.principal_amount);
         const totalCashPaid = payTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
         const totalDiscount = discountTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
-        
-        // Derived Interest = (Cash + Discount) - Principal
         const totalInterestGenerated = (totalCashPaid + totalDiscount) - totalPrincipal;
+        const totalPayable = totalPrincipal + totalInterestGenerated;
 
         return (
             <div className="card shadow-sm mb-4 border-success">
@@ -248,38 +298,15 @@ function LoanPage({ userRole }) {
                 <div className="card-body">
                     <table className="table table-borderless table-sm mb-0">
                         <tbody>
-                            <tr>
-                                <td>Total Principal Disbursed</td>
-                                <td className="text-end">{formatCurrency(totalPrincipal)}</td>
-                            </tr>
-                            <tr>
-                                <td>+ Interest & Charges</td>
-                                <td className="text-end">{formatCurrency(totalInterestGenerated)}</td>
-                            </tr>
-                            <tr className="border-top">
-                                <td className="fw-bold">Total Payable Amount</td>
-                                <td className="text-end fw-bold">{formatCurrency(totalPrincipal + totalInterestGenerated)}</td>
-                            </tr>
-                            <tr>
-                                <td className="text-success">- Total Cash Paid</td>
-                                <td className="text-end text-success">-{formatCurrency(totalCashPaid)}</td>
-                            </tr>
-                            {totalDiscount > 0 && (
-                                <tr>
-                                    <td className="text-danger">- Discount / Waiver</td>
-                                    <td className="text-end text-danger">-{formatCurrency(totalDiscount)}</td>
-                                </tr>
-                            )}
-                            <tr className="border-top border-2">
-                                <td className="fw-bold">Outstanding Balance</td>
-                                <td className="text-end fw-bold">₹0.00</td>
-                            </tr>
+                            <tr><td>Total Principal Disbursed</td><td className="text-end">{formatCurrency(totalPrincipal)}</td></tr>
+                            <tr><td>+ Interest & Charges</td><td className="text-end">{formatCurrency(totalInterestGenerated)}</td></tr>
+                            <tr className="border-top"><td className="fw-bold">Total Payable Amount</td><td className="text-end fw-bold">{formatCurrency(totalPayable)}</td></tr>
+                            <tr><td className="text-success">- Total Cash Paid</td><td className="text-end text-success">-{formatCurrency(totalCashPaid)}</td></tr>
+                            {totalDiscount > 0 && (<tr><td className="text-danger">- Discount / Waiver</td><td className="text-end text-danger">-{formatCurrency(totalDiscount)}</td></tr>)}
+                            <tr className="border-top border-2"><td className="fw-bold">Outstanding Balance</td><td className="text-end fw-bold">₹0.00</td></tr>
                         </tbody>
                     </table>
-                    <div className="text-center mt-3 small text-muted">
-                        <i className="bi bi-calendar-check me-1"></i>
-                        Loan settled on {loanDetails.closed_date ? formatDate(loanDetails.closed_date) : 'N/A'}
-                    </div>
+                    <div className="text-center mt-3 small text-muted"><i className="bi bi-calendar-check me-1"></i>Loan settled on {loanDetails.closed_date ? formatDate(loanDetails.closed_date) : 'N/A'}</div>
                 </div>
             </div>
         );
@@ -296,8 +323,8 @@ function LoanPage({ userRole }) {
                     )}
                     <Link to={`/loans/${id}/edit`} className="btn btn-warning btn-sm me-2">Edit Loan</Link>
                     <button className="btn btn-info btn-sm" onClick={() => setShowPrintModal(true)}>Print / Save Invoice</button>
-                    {userRole === 'admin' && isDeletable && (
-                        <button className="btn btn-danger btn-sm ms-2" onClick={handleDeleteLoan}><i className="bi bi-trash"></i></button>
+                    {userRole === 'admin' && (
+                        <button className="btn btn-danger btn-sm ms-2" onClick={handleDeleteLoan}><i className="bi bi-trash me-1"></i> Delete</button>
                     )}
                 </div>
             </div>
@@ -353,7 +380,6 @@ function LoanPage({ userRole }) {
                         </div>
                     </div>
 
-                    {/* Amount Due (Only Active) */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                         <div className="card shadow-sm mb-4 border-success">
                             <div className="card-header bg-success text-white">Amount Due Calculation (as of today)</div>
@@ -370,7 +396,6 @@ function LoanPage({ userRole }) {
                         </div>
                     )}
 
-                    {/* Interest Breakdown (Only Active) */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && disbursementDetails.length > 0 && (
                         <div className="card shadow-sm mb-4 border-info">
                             <div className="card-header bg-info text-dark">Detailed Interest Breakdown</div>
@@ -398,8 +423,8 @@ function LoanPage({ userRole }) {
                     )}
                 </div> 
 
-                {/* Right Column: Actions */}
                 <div className="col-lg-4">
+                    {/* Disburse More */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( 
                         <div className="card border-info shadow-sm mb-4"> 
                             <div className="card-header bg-info text-dark">Disburse More Principal</div> 
@@ -412,21 +437,53 @@ function LoanPage({ userRole }) {
                         </div> 
                     )}
                     
+                    {/* --- Card 1: Partial Payments --- */}
+                    {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( 
+                        <div className="card border-primary shadow-sm mb-4"> 
+                            <div className="card-header bg-primary text-white">Partial Payments</div> 
+                            <div className="card-body"> 
+                                <p className="small text-muted mb-2">Log regular interest or principal payments here.</p>
+                                <PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} />
+                            </div> 
+                        </div> 
+                    )}
+
+                    {/* --- Card 2: Settlement & Closure (SPLIT & AUTO-CALC) --- */}
                     {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && ( 
                         <div className="card border-warning shadow-sm mb-4"> 
-                            <div className="card-header bg-warning text-dark">Payments & Settlement</div> 
+                            <div className="card-header bg-warning text-dark">Settle & Close Loan</div> 
                             <div className="card-body"> 
-                                <div className="mb-4">
-                                    <PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} />
-                                </div> 
-                                <hr className="my-3"/> 
-                                <div> 
-                                    <h6>Settle & Close Loan</h6> 
-                                    <div className="d-flex"> 
-                                        <input type="number" step="0.01" className="form-control form-control-sm me-2" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="Discount (₹)"/> 
-                                        <button onClick={handleSettleAndClose} className="btn btn-success btn-sm">Settle</button> 
-                                    </div> 
-                                </div> 
+                                <p className="small text-muted mb-3">Finalize the loan. Values auto-calculate to match balance.</p>
+                                
+                                <div className="mb-2">
+                                    <label className="form-label small fw-bold">Outstanding Balance</label>
+                                    <div className="form-control bg-light text-end fw-bold">{formatCurrency(currentBalance)}</div>
+                                </div>
+
+                                <div className="row g-2 mb-3">
+                                    <div className="col-6">
+                                        <label className="form-label small">Settlement Amount</label>
+                                        {/* Updated Input with Handler */}
+                                        <input type="number" step="0.01" className="form-control" 
+                                            value={settleAmount} 
+                                            onChange={e => handleSettleAmountInput(e.target.value)} 
+                                            placeholder="₹ Paid"
+                                        />
+                                    </div>
+                                    <div className="col-6">
+                                        <label className="form-label small">Discount</label>
+                                        {/* Updated Input with Handler */}
+                                        <input type="number" step="0.01" className="form-control" 
+                                            value={settleDiscount} 
+                                            onChange={e => handleDiscountInput(e.target.value)} 
+                                            placeholder="₹ Waiver"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button onClick={handleSettleAndClose} className="btn btn-success w-100 fw-bold">
+                                    <i className="bi bi-check-circle-fill me-2"></i> SETTLE LOAN
+                                </button>
                             </div> 
                         </div> 
                     )}
@@ -465,8 +522,7 @@ function LoanPage({ userRole }) {
                         </div>
                     </div>
 
-                    {/* --- NEW: Settlement Summary (Only Paid) --- */}
-                    {_buildSettlementSummary()}
+                    {renderSettlementSummary()}
 
                 </div> 
             </div> 
