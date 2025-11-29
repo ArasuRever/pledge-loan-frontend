@@ -7,28 +7,47 @@ const ManageStaffPage = () => {
   
   // --- State ---
   const [users, setUsers] = useState([]);
+  const [branches, setBranches] = useState([]); // <--- NEW: Store branches
   const [loading, setLoading] = useState(true);
   
   // Create Form State
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'staff' });
+  const [newUser, setNewUser] = useState({ 
+    username: '', 
+    password: '', 
+    role: 'staff',
+    branchId: '' // <--- NEW: Track selected branch
+  });
   const [isCreating, setIsCreating] = useState(false);
 
   // Change Password Modal State
   const [passwordData, setPasswordData] = useState({ userId: null, username: '', newPassword: '' });
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
-  // --- Load Users ---
+  // --- Load Data (Users + Branches) ---
   useEffect(() => {
-    fetchUsers();
+    fetchData();
     // eslint-disable-next-line
   }, [API_URL]);
 
-  const fetchUsers = async () => {
+  const fetchData = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/users`);
-      setUsers(res.data);
+      setLoading(true);
+      // Fetch both Users and Branches in parallel
+      const [usersRes, branchesRes] = await Promise.all([
+        axios.get(`${API_URL}/api/users`),
+        axios.get(`${API_URL}/api/branches`)
+      ]);
+
+      setUsers(usersRes.data);
+      setBranches(branchesRes.data);
+
+      // Default the new user form to the first available branch
+      if (branchesRes.data.length > 0) {
+        setNewUser(prev => ({ ...prev, branchId: branchesRes.data[0].id }));
+      }
+
     } catch (err) {
-      console.error("Fetch users error:", err);
+      console.error("Fetch error:", err);
     } finally {
       setLoading(false);
     }
@@ -39,13 +58,21 @@ const ManageStaffPage = () => {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     if (!newUser.username || !newUser.password) return alert("Username and Password required");
-    
+    if (!newUser.branchId) return alert("Please select a branch"); // <--- Validation
+
     try {
       await axios.post(`${API_URL}/api/users/create`, newUser);
       alert(`New ${newUser.role.toUpperCase()} created successfully!`);
-      setNewUser({ username: '', password: '', role: 'staff' });
+      
+      // Reset form
+      setNewUser({ 
+        username: '', 
+        password: '', 
+        role: 'staff', 
+        branchId: branches[0]?.id || '' 
+      });
       setIsCreating(false);
-      fetchUsers();
+      fetchData(); // Refresh list
     } catch (err) {
       alert(err.response?.data || "Failed to create user.");
     }
@@ -57,7 +84,7 @@ const ManageStaffPage = () => {
     try {
       await axios.delete(`${API_URL}/api/users/${id}`);
       alert("User deleted successfully.");
-      fetchUsers();
+      fetchData(); // Refresh list
     } catch (err) {
       alert(err.response?.data || "Failed to delete user.");
     }
@@ -78,9 +105,15 @@ const ManageStaffPage = () => {
     }
   };
 
+  // Helper to find branch name by ID
+  const getBranchName = (id) => {
+    const branch = branches.find(b => b.id === id);
+    return branch ? branch.branch_name : 'Main Branch';
+  };
+
   return (
-    // --- CONTAINER: Centered and constrained width ---
-    <div className="container mt-4 pb-5" style={{ maxWidth: '950px' }}> 
+    // --- CONTAINER ---
+    <div className="container mt-4 pb-5" style={{ maxWidth: '1000px' }}> 
       
       {/* --- HEADER --- */}
       <div className="d-flex justify-content-between align-items-center mb-4 p-3 bg-white rounded shadow-sm border">
@@ -105,7 +138,7 @@ const ManageStaffPage = () => {
           <div className="card-body p-4 bg-light">
             <h6 className="text-uppercase text-success fw-bold mb-3">Create New Account</h6>
             <form onSubmit={handleCreateUser} className="row g-3">
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label small fw-bold text-muted">USERNAME</label>
                 <div className="input-group bg-white">
                     <span className="input-group-text border-0 bg-transparent"><i className="bi bi-person"></i></span>
@@ -120,7 +153,7 @@ const ManageStaffPage = () => {
                     />
                 </div>
               </div>
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label small fw-bold text-muted">PASSWORD</label>
                 <div className="input-group bg-white">
                     <span className="input-group-text border-0 bg-transparent"><i className="bi bi-key"></i></span>
@@ -135,6 +168,24 @@ const ManageStaffPage = () => {
                     />
                 </div>
               </div>
+              
+              {/* --- BRANCH SELECTOR (NEW) --- */}
+              <div className="col-md-3">
+                <label className="form-label small fw-bold text-muted">ASSIGN BRANCH</label>
+                <select 
+                  className="form-select border-0 shadow-sm" 
+                  value={newUser.branchId} 
+                  onChange={(e) => setNewUser({...newUser, branchId: e.target.value})}
+                  required
+                >
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.branch_name} ({b.branch_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="col-md-2">
                 <label className="form-label small fw-bold text-muted">ROLE</label>
                 <select 
@@ -146,9 +197,9 @@ const ManageStaffPage = () => {
                   <option value="admin">Admin</option>
                 </select>
               </div>
-              <div className="col-md-2 d-grid">
+              <div className="col-md-1 d-grid">
                 <label className="form-label d-none d-md-block">&nbsp;</label>
-                <button type="submit" className="btn btn-success fw-bold shadow-sm">Create</button>
+                <button type="submit" className="btn btn-success fw-bold shadow-sm"><i className="bi bi-check-lg"></i></button>
               </div>
             </form>
           </div>
@@ -165,13 +216,14 @@ const ManageStaffPage = () => {
               <thead className="table-light small text-muted text-uppercase">
                 <tr>
                   <th className="ps-4">User Profile</th>
+                  <th>Branch</th> {/* NEW COLUMN */}
                   <th>Access Level</th>
                   <th className="text-end pe-4">Account Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="3" className="text-center py-5 text-muted">Loading users...</td></tr>
+                  <tr><td colSpan="4" className="text-center py-5 text-muted">Loading users...</td></tr>
                 ) : users.map(user => {
                   const role = user.role || 'staff'; 
                   const isAdmin = role === 'admin';
@@ -189,6 +241,16 @@ const ManageStaffPage = () => {
                             </div>
                         </div>
                       </td>
+                      
+                      {/* --- BRANCH COLUMN (NEW) --- */}
+                      <td>
+                        <div className="d-flex align-items-center text-secondary">
+                            <i className="bi bi-geo-alt me-2"></i>
+                            {/* If admin, they see all, but usually belong to Main. If staff, show their specific branch. */}
+                            {getBranchName(user.branch_id)}
+                        </div>
+                      </td>
+
                       <td>
                         <span className={`badge rounded-pill px-3 py-2 ${isAdmin ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-info bg-opacity-10 text-info border border-info'}`}>
                           {role.toUpperCase()}
@@ -196,7 +258,6 @@ const ManageStaffPage = () => {
                       </td>
                       <td className="text-end pe-4">
                         <div className="d-flex justify-content-end gap-2">
-                            {/* REDESIGNED BUTTONS: Full Text + Icon */}
                             <button 
                                 className="btn btn-outline-primary btn-sm d-flex align-items-center px-3"
                                 title="Reset Password"
@@ -225,7 +286,7 @@ const ManageStaffPage = () => {
         </div>
       </div>
 
-      {/* --- CHANGE PASSWORD MODAL --- */}
+      {/* --- CHANGE PASSWORD MODAL (No changes here) --- */}
       {showPasswordModal && (
         <div style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
