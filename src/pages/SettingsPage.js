@@ -9,6 +9,9 @@ const SettingsPage = () => {
   const [branches, setBranches] = useState([]);
   const [selectedContext, setSelectedContext] = useState('global'); // 'global' or branchId
 
+  // Hidden Branch Metadata (Required to prevent backend crash on update)
+  const [branchMeta, setBranchMeta] = useState({});
+
   // Form State
   const [formData, setFormData] = useState({
     business_name: '',
@@ -77,17 +80,19 @@ const SettingsPage = () => {
     try {
       setLoading(true);
       const res = await axios.get(`${API_URL}/api/branches/${branchId}`);
-      // Merge branch details with global business name/logo for display consistency
-      // (assuming branches don't have their own logo/name in DB, we keep current state for those or fetch global to show read-only)
       
-      // We only update the editable fields for branch
+      // CRITICAL FIX: Store non-editable metadata so we can send it back later
+      setBranchMeta({
+        branch_name: res.data.branch_name,
+        branch_code: res.data.branch_code,
+        is_active: res.data.is_active
+      });
+
       setFormData(prev => ({
         ...prev,
-        // Keep global name/logo in state (or fetch global if needed), but populate branch specific fields
         address: res.data.address || '',
         phone_number: res.data.phone_number || '',
-        license_number: res.data.license_number || '', // Assuming branch model has this or you added it
-        // branch_code: res.data.branch_code // if needed
+        license_number: res.data.license_number || '', 
       }));
     } catch (err) {
       console.error("Error fetching branch details", err);
@@ -133,11 +138,15 @@ const SettingsPage = () => {
         setMessage({ type: 'success', text: 'Global Settings updated successfully!' });
       } else {
         // --- UPDATE SPECIFIC BRANCH ---
-        // We only send the fields relevant to the branch table
+        // CRITICAL FIX: Include the existing Name/Code/Active status
+        // otherwise the backend will error or set them to null.
         const branchPayload = {
+          branch_name: branchMeta.branch_name,
+          branch_code: branchMeta.branch_code,
+          is_active: branchMeta.is_active,
+          
           address: formData.address,
           phone_number: formData.phone_number,
-          // If your branch table has license_number, include it. Otherwise, remove.
           license_number: formData.license_number 
         };
         

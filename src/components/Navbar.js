@@ -240,7 +240,8 @@ function Navbar({ user, onLogout, selectedBranchId, setSelectedBranchId }) {
                   >
                     <option value="all">🏢 All Branches</option>
                     {branches.map(b => (
-                      <option key={b.branch_id} value={b.branch_id}>📍 {b.branch_name}</option>
+                      /* CRITICAL FIX: Use b.id instead of b.branch_id */
+                      <option key={b.id} value={b.id}>📍 {b.branch_name}</option>
                     ))}
                   </select>
                 ) : (
