@@ -251,11 +251,17 @@ function Navbar({ user, onLogout }) {
                     </div>
                 )}
             </div>
-            {/* --------------------- */}
             
-            <button className="btn btn-link nav-link btn-sm ms-3 text-danger" onClick={onLogout} title="Logout">
-                <i className="bi bi-box-arrow-right fs-4"></i>
+            {/* --- LOGOUT BUTTON (FIXED & VISIBLE) --- */}
+            <button 
+              className="btn btn-outline-danger ms-3 d-flex align-items-center" 
+              onClick={onLogout} 
+              title="Logout"
+              style={{height: '38px'}} // Match search bar height
+            >
+                <i className="bi bi-box-arrow-right me-1"></i> Logout
             </button>
+
           </div>
         </div>
       </div>
