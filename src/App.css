@@ -54,3 +54,81 @@
   font-size: 0.85rem;
   letter-spacing: 0.5px;
 }
+
+/* --- Modern Navbar Dropdown Design --- */
+
+/* 1. The Menu Container */
+.navbar .dropdown-menu {
+  border: none;
+  border-radius: 12px;
+  /* Deep, soft shadow for a 'floating' card effect */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  padding: 0.5rem;
+  margin-top: 12px; /* Space for the arrow */
+  overflow: visible; /* Allow arrow to stick out */
+  display: block; /* Required for animation when 'show' class is toggled */
+  
+  /* Hidden state for animation */
+  opacity: 0;
+  transform: translateY(15px);
+  pointer-events: none; /* Prevent clicking when hidden */
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* 2. The 'Show' State (Triggered by React) */
+.navbar .dropdown-menu.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* 3. The Little Arrow (Tooltip style) */
+.navbar .dropdown-menu::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 20px; /* Adjust alignment if needed */
+  width: 12px;
+  height: 12px;
+  background: white;
+  transform: rotate(45deg);
+  /* Shadow only on the top-left side of the square to match the menu */
+  box-shadow: -2px -2px 5px rgba(0, 0, 0, 0.03); 
+  border-top-left-radius: 2px;
+}
+
+/* 4. Dropdown Items */
+.navbar .dropdown-item {
+  border-radius: 8px; /* Rounded items */
+  padding: 10px 15px;
+  margin-bottom: 2px;
+  font-weight: 500;
+  color: #555;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+/* Item Hover Effect */
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus {
+  background-color: #f0f7ff; /* Very light blue tint */
+  color: #0d6efd; /* Primary Blue */
+  transform: translateX(5px); /* Subtle slide to the right */
+}
+
+/* Icons inside items */
+.navbar .dropdown-item i {
+  margin-right: 10px;
+  color: #adb5bd; /* Grayed out initially */
+  transition: color 0.2s;
+}
+
+.navbar .dropdown-item:hover i {
+  color: #0d6efd; /* Blue on hover */
+}
+
+/* 5. Divider Line */
+.navbar .dropdown-divider {
+  border-top-color: #f1f1f1;
+  margin: 0.5rem 0;
+}

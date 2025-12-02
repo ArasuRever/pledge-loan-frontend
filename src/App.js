@@ -10,7 +10,6 @@ import CustomersPage from './pages/CustomersPage';
 import CustomerPage from './pages/CustomerPage';
 import LoanPage from './pages/LoanPage';
 import AllLoansPage from './pages/AllLoansPage';
-// --- FIX: Removed curly braces here ---
 import OverdueLoansPage from './pages/OverdueLoansPage'; 
 import LoginPage from './pages/LoginPage';
 import NewLoanWorkflowPage from './pages/NewLoanWorkflowPage';
@@ -38,6 +37,9 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [user, setUser] = useState(null); 
   const [isInitializing, setIsInitializing] = useState(true);
+  
+  // GLOBAL STATE: Selected Branch (Default 'all' for Admin, specific UUID for others)
+  const [selectedBranchId, setSelectedBranchId] = useState('all');
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
@@ -45,8 +47,23 @@ function App() {
       setToken(storedToken);
       setAuthToken(storedToken);
       try {
-        const decodedUser = jwtDecode(storedToken);
-        setUser({ username: decodedUser.username, role: decodedUser.role });
+        const decoded = jwtDecode(storedToken);
+        setUser({ 
+          username: decoded.username, 
+          role: decoded.role,
+          branchId: decoded.branchId,
+          branchName: decoded.branchName
+        });
+
+        // Initialize Branch Context
+        if (decoded.role === 'admin') {
+          // Admin can switch, but defaults to 'all' or previous selection if persisted
+          setSelectedBranchId('all'); 
+        } else {
+          // Manager/Staff LOCKED to their branch
+          setSelectedBranchId(decoded.branchId);
+        }
+
       } catch (error) {
         handleLogout();
       }
@@ -61,8 +78,21 @@ function App() {
     setToken(newToken);
     setAuthToken(newToken);
     try {
-      const decodedUser = jwtDecode(newToken);
-      setUser({ username: decodedUser.username, role: decodedUser.role });
+      const decoded = jwtDecode(newToken);
+      setUser({ 
+        username: decoded.username, 
+        role: decoded.role,
+        branchId: decoded.branchId,
+        branchName: decoded.branchName
+      });
+
+      // Set Branch Context on Login
+      if (decoded.role === 'admin') {
+        setSelectedBranchId('all');
+      } else {
+        setSelectedBranchId(decoded.branchId);
+      }
+
     } catch (error) {
       console.error("Error decoding token", error);
     }
@@ -73,6 +103,7 @@ function App() {
     setToken(null);
     setAuthToken(null);
     setUser(null); 
+    setSelectedBranchId('all');
   };
 
   if (isInitializing) return <div className="container mt-5 text-center"><h5>Loading...</h5></div>;
@@ -84,23 +115,63 @@ function App() {
 
   return (
     <Router>
-      {token && <Navbar user={user} onLogout={handleLogout} />}
+      {token && (
+        <Navbar 
+          user={user} 
+          onLogout={handleLogout} 
+          selectedBranchId={selectedBranchId}
+          setSelectedBranchId={setSelectedBranchId}
+        />
+      )}
+      
       <div className="container mt-4">
         <Routes>
           <Route path="/login" element={!token ? <LoginPage onLoginSuccess={handleLoginSuccess} /> : <Navigate to="/" replace />} />
 
-          <Route path="/" element={<ProtectedRoute><HomePage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/customers" element={<ProtectedRoute><CustomersPage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/loans" element={<ProtectedRoute><AllLoansPage /></ProtectedRoute>} />
-          <Route path="/overdue" element={<ProtectedRoute><OverdueLoansPage /></ProtectedRoute>} />
+          {/* PASS branchId TO RELEVANT PAGES */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <HomePage userRole={user?.role} branchId={selectedBranchId} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/customers" element={
+            <ProtectedRoute>
+              <CustomersPage userRole={user?.role} branchId={selectedBranchId} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/loans" element={
+            <ProtectedRoute>
+              <AllLoansPage userRole={user?.role} branchId={selectedBranchId} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/overdue" element={
+            <ProtectedRoute>
+              <OverdueLoansPage userRole={user?.role} branchId={selectedBranchId} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/day-book" element={
+            <ProtectedRoute>
+              <DayBookPage userRole={user?.role} branchId={selectedBranchId} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/reports" element={
+            <ProtectedRoute>
+              <ReportsPage userRole={user?.role} branchId={selectedBranchId} />
+            </ProtectedRoute>
+          } />
+
+          {/* Standard Pages (No Branch Filter usually needed for single item views or strictly admin pages) */}
           <Route path="/new-loan" element={<ProtectedRoute><NewLoanWorkflowPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/manage-staff" element={<ProtectedRoute><ManageStaffPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/customers/:id" element={<ProtectedRoute><CustomerPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans/:id" element={<ProtectedRoute><LoanPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/loans/:id/edit" element={<ProtectedRoute><EditLoanPage /></ProtectedRoute>} />
           <Route path="/recycle-bin" element={<ProtectedRoute><RecycleBinPage userRole={user?.role} /></ProtectedRoute>} />
-          <Route path="/day-book" element={<ProtectedRoute><DayBookPage /></ProtectedRoute>} />
-          <Route path="/reports" element={<ProtectedRoute><ReportsPage userRole={user?.role} /></ProtectedRoute>} />
           <Route path="/manage-branches" element={<ProtectedRoute><ManageBranchesPage /></ProtectedRoute>} />
           <Route path="/branches/new" element={<ProtectedRoute><CreateBranchPage /></ProtectedRoute>} />
           <Route path="/branches/:id" element={<ProtectedRoute><BranchDetailsPage /></ProtectedRoute>} />

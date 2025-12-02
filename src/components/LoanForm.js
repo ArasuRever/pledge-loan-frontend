@@ -9,7 +9,7 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
   const [formData, setFormData] = useState({
     book_loan_number: '',
     principal_amount: '',
-    interest_rate: '2.5', // <--- ENSURE THIS IS '2.5'
+    interest_rate: '2.5', // Default value
     item_type: 'gold',
     description: '',
     quality: '',
@@ -19,6 +19,9 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
     appraised_value: '',
     deductFirstMonthInterest: false
   });
+
+  // --- UI State ---
+  const [showInterestDropdown, setShowInterestDropdown] = useState(false); // Toggle for interest menu
 
   // --- Photo State ---
   const [photoSource, setPhotoSource] = useState('upload');
@@ -39,8 +42,14 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
     setFormData({ ...formData, [e.target.name]: value });
   };
 
+  const handleInterestSelect = (rate) => {
+    setFormData({ ...formData, interest_rate: rate });
+    setShowInterestDropdown(false); // Close dropdown after selection
+  };
+
   const handleGrossWeightChange = (e) => {
      const gWeight = e.target.value;
+     // Auto-fill net weight if empty
      if (formData.net_weight === '') {
         setFormData(prev => ({ ...prev, gross_weight: gWeight, net_weight: gWeight }));
      } else {
@@ -83,8 +92,7 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
 
   const handleSubmit = async (e) => {
       e.preventDefault();
-      console.log("Submitting Loan Data:", formData); // <--- DEBUG LOG
-
+      
       const data = new FormData();
       data.append('customer_id', customerId);
       Object.keys(formData).forEach(key => {
@@ -99,10 +107,10 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
       try {
         await axios.post(`${API_URL}/api/loans`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('New loan added!');
-        // Reset
+        // Reset Form
         setFormData({
             book_loan_number: '', principal_amount: '', 
-            interest_rate: '2.5', // <--- RESET TO 2.5 explicitly
+            interest_rate: '2.5', 
             item_type: 'gold', description: '', quality: '',
             gross_weight: '', net_weight: '', purity: '', appraised_value: '',
             deductFirstMonthInterest: false
@@ -115,9 +123,12 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
       }
   };
 
-  // --- Styles for Modal ---
+  // --- Styles ---
   const modalOverlay = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1050 };
   const modalContent = { backgroundColor: 'white', padding: '20px', borderRadius: '8px', textAlign: 'center' };
+
+  // Common Interest Rates
+  const interestOptions = ["1.0", "1.5", "1.8", "2.0", "2.25", "2.5", "3.0", "3.5"];
 
   return (
     <div className="card shadow-sm border-0 my-4">
@@ -138,21 +149,58 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
             </div>
           </div>
 
-          {/* ROW 2: Interest & Deduction */}
+          {/* ROW 2: Interest (Editable Dropdown) & Deduction */}
           <div className="row g-3 mb-3">
             <div className="col-md-6">
                <label className="form-label fw-medium">Monthly Interest Rate (%)</label>
-               {/* UPDATED: Explicit options to prevent mapping errors */}
-               <select className="form-select" name="interest_rate" value={formData.interest_rate} onChange={handleChange}>
-                  <option value="1.0">1.0%</option>
-                  <option value="1.5">1.5%</option>
-                  <option value="2.0">2.0%</option>
-                  <option value="2.25">2.25%</option>
-                  <option value="2.5">2.5%</option>
-                  <option value="3.0">3.0%</option>
-                  <option value="3.5">3.5%</option>
-               </select>
+               
+               {/* Custom Input Group with Dropdown */}
+               <div className="input-group position-relative">
+                 <input 
+                    type="number" 
+                    step="0.01"
+                    className="form-control" 
+                    name="interest_rate" 
+                    value={formData.interest_rate} 
+                    onChange={handleChange}
+                    placeholder="Enter rate (e.g. 2.5)"
+                    required
+                 />
+                 <button 
+                    className="btn btn-outline-secondary dropdown-toggle" 
+                    type="button"
+                    onClick={() => setShowInterestDropdown(!showInterestDropdown)}
+                 >
+                    Select
+                 </button>
+                 
+                 {/* Custom Dropdown Menu */}
+                 {showInterestDropdown && (
+                   <ul className="dropdown-menu show" style={{ 
+                       position: 'absolute', 
+                       top: '100%', 
+                       right: 0, 
+                       width: '100%', 
+                       maxHeight: '200px', 
+                       overflowY: 'auto',
+                       zIndex: 1000 
+                   }}>
+                     {interestOptions.map(rate => (
+                       <li key={rate}>
+                         <button 
+                            className="dropdown-item" 
+                            type="button" 
+                            onClick={() => handleInterestSelect(rate)}
+                         >
+                           {rate}%
+                         </button>
+                       </li>
+                     ))}
+                   </ul>
+                 )}
+               </div>
              </div>
+             
              <div className="col-md-6 d-flex align-items-end">
                 <div className="form-check mb-2">
                   <input className="form-check-input" type="checkbox" id="deductInterest" name="deductFirstMonthInterest" checked={formData.deductFirstMonthInterest} onChange={handleChange} />
@@ -227,7 +275,7 @@ const LoanForm = ({ customerId, onLoanAdded, onCancel }) => {
             )}
           </div>
 
-          {/* Action Buttons with Cancel */}
+          {/* Action Buttons */}
           <div className="d-flex justify-content-end gap-2">
              {onCancel && (
                <button type="button" className="btn btn-secondary btn-lg" onClick={onCancel}>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable'; // Ensure this is installed or use manual table logic if simple
+import 'jspdf-autotable'; 
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -15,28 +15,50 @@ export const PrintableInvoice = ({ loanDetails }) => {
     logo_url: null
   });
 
-  // --- 1. FETCH BUSINESS SETTINGS ---
+  // --- 1. FETCH CONFIGURATION (Smart Branch Detection) ---
   useEffect(() => {
-    const fetchSettings = async () => {
+    const fetchConfig = async () => {
       try {
         const token = localStorage.getItem('token');
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-        const res = await axios.get(`${API_URL}/api/settings`, { headers });
-        if (res.data) {
-          setSettings({
-            business_name: res.data.business_name || 'SRI KUBERA BANKERS',
-            address: res.data.address || '',
-            phone_number: res.data.phone_number || '',
-            license_number: res.data.license_number || '',
-            logo_url: res.data.logo_url || null
-          });
+        
+        // A. Get Global Settings (Name, Logo)
+        const settingsRes = await axios.get(`${API_URL}/api/settings`, { headers });
+        let finalSettings = settingsRes.data;
+
+        // B. Check if Loan belongs to a specific branch
+        if (loanDetails && loanDetails.branch_id) {
+            try {
+                // Get Branch Details (Address, Phone)
+                const branchRes = await axios.get(`${API_URL}/api/branches/${loanDetails.branch_id}`, { headers });
+                
+                // Merge: Keep Global Name/Logo, Override Location Info
+                finalSettings = {
+                    ...finalSettings,
+                    address: branchRes.data.address || finalSettings.address,
+                    phone_number: branchRes.data.phone_number || finalSettings.phone_number,
+                    license_number: branchRes.data.license_number || finalSettings.license_number
+                };
+            } catch (bErr) {
+                console.warn("Using global settings (Branch fetch failed)");
+            }
         }
+
+        setSettings({
+            business_name: finalSettings.business_name || 'SRI KUBERA BANKERS',
+            address: finalSettings.address || '',
+            phone_number: finalSettings.phone_number || '',
+            license_number: finalSettings.license_number || '',
+            logo_url: finalSettings.logo_url || null
+        });
+
       } catch (err) {
         console.error("Error fetching settings:", err);
       }
     };
-    fetchSettings();
-  }, []);
+
+    if (loanDetails) fetchConfig();
+  }, [loanDetails]);
 
   if (!loanDetails) return <div className="p-5 text-center">Loading Invoice Data...</div>;
 
@@ -208,7 +230,7 @@ export const PrintableInvoice = ({ loanDetails }) => {
              ${logoImg}
           </div>
           <div style="display: inline-block; vertical-align: top;">
-             <h1>ஸ்ரீ குபேர லட்சுமி பாங்கர்ஸ்</h1>
+             <h1>${settings.business_name}</h1>
              <p>${settings.address}</p>
              <p>போன்: ${settings.phone_number}</p>
           </div>
@@ -281,7 +303,6 @@ export const PrintableInvoice = ({ loanDetails }) => {
     printWindow.document.close();
   };
 
-  // --- UI: PREVIEW ---
   return (
     <div className="card shadow-sm">
       <div className="card-header bg-light d-flex justify-content-between align-items-center">
@@ -296,12 +317,12 @@ export const PrintableInvoice = ({ loanDetails }) => {
          </div>
       </div>
       
-      {/* Visual Preview (Simplified English HTML for User Confirmation) */}
       <div className="card-body bg-white p-5 border-bottom" style={{minHeight: '400px', opacity: 0.8, transform: 'scale(0.95)'}}>
          <div className="text-center mb-4">
             <h4 className="fw-bold text-uppercase">{settings.business_name}</h4>
             <p className="text-muted small mb-0">{settings.address}</p>
          </div>
+         {/* Preview Content ... */}
          <div className="row g-4">
              <div className="col-6">
                 <h6 className="fw-bold border-bottom pb-2">LOAN DETAILS</h6>
@@ -317,10 +338,6 @@ export const PrintableInvoice = ({ loanDetails }) => {
                     <li className="mb-1"><strong>Phone:</strong> {loanDetails.phone_number}</li>
                 </ul>
              </div>
-         </div>
-         <div className="alert alert-info mt-4 text-center small">
-            <i className="bi bi-info-circle me-1"></i> 
-            This is a preview. Use the buttons above to generate the final Print/PDF.
          </div>
       </div>
     </div>

@@ -3,58 +3,42 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL; // 1. ADD THIS
+const API_URL = process.env.REACT_APP_API_URL;
 
-function AllLoansPage() {
+function AllLoansPage({ userRole, branchId }) {
   const [loans, setLoans] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
-  const [fetchError, setFetchError] = useState(null); // Add state for error message
+  const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
     const fetchAllLoans = async () => {
         setIsLoading(true);
-        setFetchError(null); // Clear previous errors
-        console.log("AllLoansPage: Attempting to fetch /api/loans"); // Log start
+        setFetchError(null); 
         try {
-            // Check if Axios default header is set (for debugging)
-            console.log("AllLoansPage: Axios Auth Header before fetch:", axios.defaults.headers.common['Authorization']);
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` };
 
-            // 2. USE THE VARIABLE HERE
-            const response = await axios.get(`${API_URL}/api/loans`);
-            console.log("AllLoansPage: Fetch successful", response.data); // Log success
+            const params = {};
+            if (branchId && branchId !== 'all') {
+                params.branchId = branchId;
+            }
+
+            const response = await axios.get(`${API_URL}/api/loans`, { headers, params });
             setLoans(response.data);
         } catch (error) {
-            console.error("AllLoansPage: Error fetching all loans:", error); // Log the full error
-            if (error.response) {
-                // The request was made and the server responded with a status code
-                // that falls out of the range of 2xx
-                console.error("AllLoansPage: Error response data:", error.response.data);
-                console.error("AllLoansPage: Error response status:", error.response.status);
-                console.error("AllLoansPage: Error response headers:", error.response.headers);
-                 setFetchError(`Failed to load loans. Server responded with status ${error.response.status}. Check console for details.`);
-                 if (error.response.status === 401 || error.response.status === 403) {
-                     setFetchError("Authentication failed. Please try logging out and logging back in.");
-                 }
-            } else if (error.request) {
-                // The request was made but no response was received
-                console.error("AllLoansPage: No response received:", error.request);
-                setFetchError("Failed to load loans. No response from server.");
-            } else {
-                // Something happened in setting up the request that triggered an Error
-                console.error('AllLoansPage: Error setting up request:', error.message);
-                 setFetchError("Failed to load loans. Error setting up request.");
-            }
-            setLoans([]); // Ensure loans are empty on error
+            console.error("AllLoansPage: Error fetching all loans:", error); 
+            setFetchError("Failed to load loans. Please try again.");
+            setLoans([]); 
         } finally {
             setIsLoading(false);
         }
     };
-    fetchAllLoans();
-  }, []); // Fetch on mount
 
-  // Combine search and status filtering
+    fetchAllLoans();
+  }, [branchId]); 
+
   const filteredLoans = loans.filter(loan => {
     const statusMatch = filterStatus === 'all' || loan.status === filterStatus;
     if (!statusMatch) return false;
@@ -65,65 +49,107 @@ function AllLoansPage() {
     return nameMatch || phoneMatch || bookMatch;
   });
 
-  // Display Loading or Error State
-  if (isLoading) return <div className="text-center mt-5">Loading loans...</div>;
-  if (fetchError) return <div className="alert alert-danger mt-3">{fetchError}</div>; // Display fetch error
+  if (isLoading) return <div className="text-center mt-5"><div className="spinner-border text-primary"></div></div>;
+  if (fetchError) return <div className="alert alert-danger mt-3">{fetchError}</div>;
 
+  const showBranchInfo = userRole === 'admin' && branchId === 'all';
 
   return (
-    <div>
-      <div className="d-flex justify-content-between align-items-center mb-3">
-          <h2>All Loans</h2> {/* Title kept as "All Loans" */}
-          <select
-              className="form-select form-select-sm w-auto"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              aria-label="Filter by status"
-          >
-              <option value="all">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="overdue">Overdue</option>
-              <option value="paid">Paid</option>
-              <option value="forfeited">Forfeited</option>
-          </select>
+    <div className="card shadow-sm border-0">
+      {/* HEADER: Title & Filters */}
+      <div className="card-header bg-white py-3">
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-3">
+              <h4 className="mb-0 fw-bold text-dark"><i className="bi bi-files me-2 text-primary"></i>All Loans</h4>
+              
+              <div className="d-flex align-items-center gap-2">
+                  <span className="text-muted small fw-bold text-uppercase">Status:</span>
+                  <select
+                      className="form-select form-select-sm w-auto fw-bold text-dark"
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                  >
+                      <option value="all">All Statuses</option>
+                      <option value="active">Active</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="paid">Paid</option>
+                      <option value="forfeited">Forfeited</option>
+                  </select>
+              </div>
+          </div>
+
+          <div className="input-group">
+            <span className="input-group-text bg-light border-end-0"><i className="bi bi-search text-muted"></i></span>
+            <input
+              type="text"
+              className="form-control border-start-0 bg-light"
+              placeholder="Search by customer name, phone, or book loan number..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
       </div>
 
-      <input
-        type="text"
-        className="form-control mb-3"
-        placeholder="Search by customer name, phone, or book loan number..."
-        value={searchTerm}
-        onChange={e => setSearchTerm(e.target.value)}
-      />
-
-      <div className="list-group">
-        {/* Display message if loading finished but no loans */}
-        {!isLoading && !fetchError && filteredLoans.length === 0 ? (
-           <div className="list-group-item text-muted">No loans found matching your criteria.</div>
+      {/* SCROLLABLE LIST CONTAINER */}
+      <div 
+        className="list-group list-group-flush overflow-auto" 
+        style={{ maxHeight: '72vh', minHeight: '400px' }}
+      >
+        {filteredLoans.length === 0 ? (
+           <div className="text-center py-5 text-muted">
+              <i className="bi bi-inbox fs-1 d-block mb-2 opacity-50"></i>
+              No loans found matching your criteria.
+           </div>
         ) : (
           filteredLoans.map(loan => (
-            <Link key={loan.id} to={`/loans/${loan.id}`} className="list-group-item list-group-item-action">
-              <div className="d-flex w-100 justify-content-between">
-                <h5 className="mb-1">Loan #{loan.id} for {loan.customer_name}</h5>
-                <small className='d-flex align-items-center'>
-                   <span className={`badge me-2 bg-${
-                       loan.status === 'overdue' ? 'danger' :
-                       loan.status === 'paid' ? 'secondary' :
-                       loan.status === 'forfeited' ? 'dark' : 'success'
-                   }`}>{loan.status}</span>
-                   Book #: {loan.book_loan_number}
-                </small>
+            <Link key={loan.id} to={`/loans/${loan.id}`} className="list-group-item list-group-item-action py-3 px-4">
+              <div className="d-flex w-100 justify-content-between align-items-center mb-2">
+                <div>
+                   <h6 className="mb-1 fw-bold text-primary">
+                      Loan #{loan.book_loan_number || loan.id}
+                   </h6>
+                   <small className="text-dark fw-500">{loan.customer_name}</small>
+                </div>
+
+                <div className="text-end">
+                   {showBranchInfo && loan.branch_name && (
+                       <div className="badge bg-light text-secondary border mb-1 d-block">
+                           {loan.branch_name}
+                       </div>
+                   )}
+                   <span className={`badge rounded-pill ${
+                       loan.status === 'overdue' ? 'bg-danger bg-opacity-10 text-danger' :
+                       loan.status === 'paid' ? 'bg-secondary bg-opacity-10 text-secondary' :
+                       loan.status === 'forfeited' ? 'bg-dark text-white' : 'bg-success bg-opacity-10 text-success'
+                   }`}>
+                      {loan.status.toUpperCase()}
+                   </span>
+                </div>
               </div>
-              <p className="mb-1">Amount: ₹{parseFloat(loan.principal_amount || 0).toLocaleString('en-IN')}</p>
-              <small className="text-muted">
-                Pledged: {new Date(loan.pledge_date).toLocaleDateString()}
-                {loan.status !== 'paid' && loan.status !== 'forfeited' && ` | Due: ${new Date(loan.due_date).toLocaleDateString()}`}
-              </small>
+
+              <div className="d-flex justify-content-between align-items-end mt-2">
+                  <div>
+                    <span className="d-block text-muted small" style={{fontSize: '0.75rem'}}>PRINCIPAL</span>
+                    <span className="fw-bold fs-5">₹{parseFloat(loan.principal_amount || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="text-end text-muted small">
+                    <div>Pledged: {new Date(loan.pledge_date).toLocaleDateString()}</div>
+                    {loan.status !== 'paid' && loan.status !== 'forfeited' && (
+                        <div className={loan.status === 'overdue' ? 'text-danger fw-bold' : ''}>
+                            Due: {new Date(loan.due_date).toLocaleDateString()}
+                        </div>
+                    )}
+                  </div>
+              </div>
             </Link>
           ))
         )}
       </div>
+
+      <div className="card-footer bg-light text-end text-muted small py-2">
+          Showing {filteredLoans.length} records
+      </div>
     </div>
   );
 }
+
 export default AllLoansPage;

@@ -7,7 +7,7 @@ const ManageStaffPage = () => {
   
   // --- State ---
   const [users, setUsers] = useState([]);
-  const [branches, setBranches] = useState([]); // <--- NEW: Store branches
+  const [branches, setBranches] = useState([]); 
   const [loading, setLoading] = useState(true);
   
   // Create Form State
@@ -15,7 +15,7 @@ const ManageStaffPage = () => {
     username: '', 
     password: '', 
     role: 'staff',
-    branchId: '' // <--- NEW: Track selected branch
+    branchId: '' 
   });
   const [isCreating, setIsCreating] = useState(false);
 
@@ -58,7 +58,7 @@ const ManageStaffPage = () => {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     if (!newUser.username || !newUser.password) return alert("Username and Password required");
-    if (!newUser.branchId) return alert("Please select a branch"); // <--- Validation
+    if (!newUser.branchId) return alert("Please select a branch"); 
 
     try {
       await axios.post(`${API_URL}/api/users/create`, newUser);
@@ -111,6 +111,15 @@ const ManageStaffPage = () => {
     return branch ? branch.branch_name : 'Main Branch';
   };
 
+  // Helper for Badge Styles
+  const getRoleStyle = (role) => {
+    switch (role) {
+      case 'admin': return { badge: 'bg-danger bg-opacity-10 text-danger border border-danger', avatar: 'bg-danger text-white' };
+      case 'manager': return { badge: 'bg-warning bg-opacity-10 text-dark border border-warning', avatar: 'bg-warning text-dark' };
+      default: return { badge: 'bg-info bg-opacity-10 text-info border border-info', avatar: 'bg-info text-white' };
+    }
+  };
+
   return (
     // --- CONTAINER ---
     <div className="container mt-4 pb-5" style={{ maxWidth: '1000px' }}> 
@@ -138,7 +147,9 @@ const ManageStaffPage = () => {
           <div className="card-body p-4 bg-light">
             <h6 className="text-uppercase text-success fw-bold mb-3">Create New Account</h6>
             <form onSubmit={handleCreateUser} className="row g-3">
-              <div className="col-md-3">
+              
+              {/* Row 1: Credentials */}
+              <div className="col-md-4">
                 <label className="form-label small fw-bold text-muted">USERNAME</label>
                 <div className="input-group bg-white">
                     <span className="input-group-text border-0 bg-transparent"><i className="bi bi-person"></i></span>
@@ -153,7 +164,7 @@ const ManageStaffPage = () => {
                     />
                 </div>
               </div>
-              <div className="col-md-3">
+              <div className="col-md-4">
                 <label className="form-label small fw-bold text-muted">PASSWORD</label>
                 <div className="input-group bg-white">
                     <span className="input-group-text border-0 bg-transparent"><i className="bi bi-key"></i></span>
@@ -168,9 +179,9 @@ const ManageStaffPage = () => {
                     />
                 </div>
               </div>
-              
-              {/* --- BRANCH SELECTOR (NEW) --- */}
-              <div className="col-md-3">
+
+              {/* Row 2: Assignment & Submit */}
+              <div className="col-md-4">
                 <label className="form-label small fw-bold text-muted">ASSIGN BRANCH</label>
                 <select 
                   className="form-select border-0 shadow-sm" 
@@ -186,20 +197,24 @@ const ManageStaffPage = () => {
                 </select>
               </div>
 
-              <div className="col-md-2">
+              <div className="col-md-4">
                 <label className="form-label small fw-bold text-muted">ROLE</label>
                 <select 
                   className="form-select border-0 shadow-sm" 
                   value={newUser.role} 
                   onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                 >
-                  <option value="staff">Staff</option>
-                  <option value="admin">Admin</option>
+                  <option value="staff">Staff (Data Entry)</option>
+                  <option value="manager">Manager (Branch Admin)</option>
+                  <option value="admin">Super Admin</option>
                 </select>
               </div>
-              <div className="col-md-1 d-grid">
-                <label className="form-label d-none d-md-block">&nbsp;</label>
-                <button type="submit" className="btn btn-success fw-bold shadow-sm"><i className="bi bi-check-lg"></i></button>
+              
+              {/* BUTTON ROW - Full width for clarity */}
+              <div className="col-12 text-end mt-4 pt-2 border-top">
+                <button type="submit" className="btn btn-success fw-bold px-5 shadow-sm">
+                   <i className="bi bi-person-check-fill me-2"></i> Create User
+                </button>
               </div>
             </form>
           </div>
@@ -216,7 +231,7 @@ const ManageStaffPage = () => {
               <thead className="table-light small text-muted text-uppercase">
                 <tr>
                   <th className="ps-4">User Profile</th>
-                  <th>Branch</th> {/* NEW COLUMN */}
+                  <th>Branch</th>
                   <th>Access Level</th>
                   <th className="text-end pe-4">Account Actions</th>
                 </tr>
@@ -226,13 +241,13 @@ const ManageStaffPage = () => {
                   <tr><td colSpan="4" className="text-center py-5 text-muted">Loading users...</td></tr>
                 ) : users.map(user => {
                   const role = user.role || 'staff'; 
-                  const isAdmin = role === 'admin';
+                  const styles = getRoleStyle(role); 
                   
                   return (
                     <tr key={user.id}>
                       <td className="ps-4 py-3">
                         <div className="d-flex align-items-center">
-                            <div className={`rounded-circle ${isAdmin ? 'bg-danger' : 'bg-info'} text-white d-flex align-items-center justify-content-center me-3 shadow-sm`} style={{width: '40px', height: '40px', fontSize: '1.1rem'}}>
+                            <div className={`rounded-circle ${styles.avatar} d-flex align-items-center justify-content-center me-3 shadow-sm`} style={{width: '40px', height: '40px', fontSize: '1.1rem'}}>
                                 {user.username.charAt(0).toUpperCase()}
                             </div>
                             <div>
@@ -242,17 +257,15 @@ const ManageStaffPage = () => {
                         </div>
                       </td>
                       
-                      {/* --- BRANCH COLUMN (NEW) --- */}
                       <td>
                         <div className="d-flex align-items-center text-secondary">
                             <i className="bi bi-geo-alt me-2"></i>
-                            {/* If admin, they see all, but usually belong to Main. If staff, show their specific branch. */}
                             {getBranchName(user.branch_id)}
                         </div>
                       </td>
 
                       <td>
-                        <span className={`badge rounded-pill px-3 py-2 ${isAdmin ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-info bg-opacity-10 text-info border border-info'}`}>
+                        <span className={`badge rounded-pill px-3 py-2 ${styles.badge}`}>
                           {role.toUpperCase()}
                         </span>
                       </td>
@@ -286,7 +299,7 @@ const ManageStaffPage = () => {
         </div>
       </div>
 
-      {/* --- CHANGE PASSWORD MODAL (No changes here) --- */}
+      {/* --- CHANGE PASSWORD MODAL --- */}
       {showPasswordModal && (
         <div style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 

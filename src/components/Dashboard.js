@@ -5,32 +5,11 @@ import { Link } from 'react-router-dom';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-function Dashboard() {
+function Dashboard({ branchId }) {
   const [stats, setStats] = useState(null);
-  const [branches, setBranches] = useState([]);
-  const [selectedBranch, setSelectedBranch] = useState(''); // '' = All Branches
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 1. Fetch Branches
-  useEffect(() => {
-    const fetchBranches = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          const res = await axios.get(`${API_URL}/api/branches`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          setBranches(res.data);
-        }
-      } catch (err) {
-        console.error("Failed to load branches");
-      }
-    };
-    fetchBranches();
-  }, []);
-
-  // 2. Fetch Stats
   useEffect(() => {
     const fetchStats = async () => {
       setIsLoading(true);
@@ -38,9 +17,17 @@ function Dashboard() {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const query = selectedBranch ? `?branchId=${selectedBranch}` : '';
-        const response = await axios.get(`${API_URL}/api/dashboard/stats${query}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+        // Prepare Query Params
+        // If branchId is 'all', we send nothing (or handle logic in backend to fetch all)
+        // If branchId is a specific UUID, we filter by it.
+        const params = {};
+        if (branchId && branchId !== 'all') {
+            params.branchId = branchId;
+        }
+
+        const response = await axios.get(`${API_URL}/api/dashboard/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          params: params
         });
         setStats(response.data);
       } catch (err) {
@@ -50,46 +37,40 @@ function Dashboard() {
         setIsLoading(false);
       }
     };
+
     fetchStats();
-  }, [selectedBranch]);
+  }, [branchId]); // Refetch whenever the branch context changes
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount || 0);
   };
 
-  if (isLoading && !stats) return <div className="text-center p-5"><div className="spinner-border text-primary"></div></div>;
+  if (isLoading) return (
+      <div className="d-flex justify-content-center p-5">
+          <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+          </div>
+      </div>
+  );
+
   if (error) return <div className="alert alert-danger">{error}</div>;
   if (!stats) return null;
 
   return (
     <div className="mb-4">
-      {/* --- DASHBOARD HEADER & FILTER --- */}
+      {/* --- DASHBOARD HEADER --- */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
           <h4 className="fw-bold text-dark mb-0">
             <i className="bi bi-speedometer2 me-2 text-primary"></i>Financial Overview
           </h4>
-          <small className="text-muted">Real-time snapshots of your business</small>
-        </div>
-
-        {/* Stylish Branch Selector */}
-        <div className="bg-white p-2 rounded shadow-sm d-flex align-items-center border">
-          <span className="text-secondary fw-bold small text-uppercase me-2 ps-2">
-            <i className="bi bi-building me-1"></i>View:
-          </span>
-          <select 
-            className="form-select form-select-sm border-0 fw-bold text-primary"
-            style={{ minWidth: '150px', cursor: 'pointer', boxShadow: 'none' }}
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-          >
-            <option value="">All Branches (HQ)</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.branch_name}</option>
-            ))}
-          </select>
+          <small className="text-muted">
+            {branchId === 'all' 
+              ? 'Consolidated view for All Branches' 
+              : 'Real-time snapshot for selected branch'}
+          </small>
         </div>
       </div>
       
