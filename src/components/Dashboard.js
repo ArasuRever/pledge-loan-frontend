@@ -17,6 +17,7 @@ function Dashboard({ branchId }) {
         const token = localStorage.getItem('token');
         if (!token) return;
 
+        // Prepare Query Params
         const params = {};
         if (branchId && branchId !== 'all') {
             params.branchId = branchId;
@@ -36,7 +37,7 @@ function Dashboard({ branchId }) {
     };
 
     fetchStats();
-  }, [branchId]);
+  }, [branchId]); 
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -46,95 +47,97 @@ function Dashboard({ branchId }) {
 
   if (isLoading) return (
       <div className="d-flex justify-content-center p-5">
-          <div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div>
+          <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+          </div>
       </div>
   );
 
   if (error) return <div className="alert alert-danger">{error}</div>;
   if (!stats) return null;
 
-  // Use the new fields
-  const principalOut = stats.totalPrincipalOut || 0;
-  const interestOut = stats.totalOutstandingInterest || 0;
-  // Calculate Total Outstanding Value
-  const totalOutstandingValue = principalOut + interestOut;
-
   return (
     <div className="mb-4">
-      {/* HEADER */}
+      {/* --- DASHBOARD HEADER --- */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
           <h4 className="fw-bold text-dark mb-0">
             <i className="bi bi-speedometer2 me-2 text-primary"></i>Financial Overview
           </h4>
           <small className="text-muted">
-            {branchId === 'all' ? 'Consolidated View (All Branches)' : 'Branch Snapshot'}
+            {branchId === 'all' 
+              ? 'Consolidated view for All Branches' 
+              : 'Real-time snapshot for selected branch'}
           </small>
-        </div>
-        <div className="bg-white px-3 py-2 rounded shadow-sm border">
-            <small className="text-muted fw-bold d-block">TOTAL OUTSTANDING VALUE</small>
-            <span className="fs-4 fw-bold text-primary">{formatCurrency(totalOutstandingValue)}</span>
         </div>
       </div>
       
-      {/* STATS GRID */}
+      {/* --- STATS GRID --- */}
       <div className="row g-3">
         
-        {/* 1. PRINCIPAL OUT */}
+        {/* 1. PRINCIPAL OUT (Primary Metric) */}
         <div className="col-12 col-md-6 col-xl-3">
           <div className="card border-0 shadow-sm h-100 border-start border-4 border-primary">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <h6 className="text-uppercase text-muted small fw-bold mb-0">Principal Out</h6>
-                <div className="icon-shape bg-primary bg-opacity-10 text-primary rounded-circle p-2"><i className="bi bi-cash-stack fs-5"></i></div>
+                <div className="icon-shape bg-primary bg-opacity-10 text-primary rounded-circle p-2">
+                  <i className="bi bi-cash-stack fs-5"></i>
+                </div>
               </div>
-              <h3 className="fw-bold text-dark mb-0">{formatCurrency(principalOut)}</h3>
-              <small className="text-muted">Disbursed Principal</small>
+              <h3 className="fw-bold text-dark mb-0">{formatCurrency(stats.totalPrincipalOut)}</h3>
+              <small className="text-muted">Active disbursement</small>
             </div>
           </div>
         </div>
 
-        {/* 2. INTEREST OUT (Updated) */}
+        {/* 2. TOTAL INTEREST ACCRUED (Modified) */}
         <div className="col-12 col-md-6 col-xl-3">
-          <div className="card border-0 shadow-sm h-100 border-start border-4 border-warning">
+          <div className="card border-0 shadow-sm h-100 border-start border-4 border-success">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <h6 className="text-uppercase text-muted small fw-bold mb-0">Outstanding Interest</h6>
-                <div className="icon-shape bg-warning bg-opacity-10 text-warning rounded-circle p-2"><i className="bi bi-graph-up-arrow fs-5"></i></div>
+                <h6 className="text-uppercase text-muted small fw-bold mb-0">Total Interest Accrued</h6>
+                <div className="icon-shape bg-success bg-opacity-10 text-success rounded-circle p-2">
+                  <i className="bi bi-graph-up-arrow fs-5"></i>
+                </div>
               </div>
-              <h3 className="fw-bold text-dark mb-0">{formatCurrency(interestOut)}</h3>
-              <small className="text-muted">Total Accrued Pending</small>
+              <h3 className="fw-bold text-success mb-0">{formatCurrency(stats.totalInterestAccrued)}</h3>
+              <small className="text-muted">Pending collection</small>
             </div>
           </div>
         </div>
 
-        {/* 3. ACTIVE LOANS */}
+        {/* 3. ACTIVE LOANS & CUSTOMERS */}
         <div className="col-12 col-md-6 col-xl-3">
           <div className="card border-0 shadow-sm h-100 border-start border-4 border-info">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <h6 className="text-uppercase text-muted small fw-bold mb-0">Active Loans</h6>
-                <div className="icon-shape bg-info bg-opacity-10 text-info rounded-circle p-2"><i className="bi bi-files fs-5"></i></div>
+                <div className="icon-shape bg-info bg-opacity-10 text-info rounded-circle p-2">
+                  <i className="bi bi-files fs-5"></i>
+                </div>
               </div>
               <div className="d-flex align-items-baseline">
-                <h3 className="fw-bold text-dark mb-0 me-2">{stats.loansActive}</h3>
+                <h3 className="fw-bold text-dark mb-0 me-2">{stats.totalActiveLoans}</h3>
                 <span className="text-muted small">/ {stats.totalCustomers} Cust.</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 4. OVERDUE */}
+        {/* 4. OVERDUE (Danger Metric) */}
         <div className="col-12 col-md-6 col-xl-3">
           <div className="card border-0 shadow-sm h-100 border-start border-4 border-danger">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <h6 className="text-uppercase text-danger small fw-bold mb-0">Overdue Loans</h6>
-                <div className="icon-shape bg-danger bg-opacity-10 text-danger rounded-circle p-2"><i className="bi bi-exclamation-triangle-fill fs-5"></i></div>
+                <div className="icon-shape bg-danger bg-opacity-10 text-danger rounded-circle p-2">
+                  <i className="bi bi-exclamation-triangle-fill fs-5"></i>
+                </div>
               </div>
               <div className="d-flex justify-content-between align-items-end">
-                <h3 className="fw-bold text-danger mb-0">{stats.loansOverdue}</h3>
-                {stats.loansOverdue > 0 && (
+                <h3 className="fw-bold text-danger mb-0">{stats.totalOverdueLoans}</h3>
+                {stats.totalOverdueLoans > 0 && (
                   <Link to="/overdue" className="btn btn-sm btn-outline-danger px-3 rounded-pill">
                     View <i className="bi bi-arrow-right ms-1"></i>
                   </Link>
