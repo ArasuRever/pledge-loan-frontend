@@ -1,12 +1,12 @@
 // src/components/RenewLoanModal.js
-import React, { useState } from 'react'; // Removed useEffect
+import React, { useState } from 'react';
 import axios from 'axios';
 
 // Styles
 const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100 };
 const contentStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '10px', width: '90%', maxWidth: '500px', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' };
 
-const RenewLoanModal = ({ loan, outstandingInterest, onClose, onRenewalSuccess }) => {
+const RenewLoanModal = ({ loan, outstandingInterest, currentPrincipal, onClose, onRenewalSuccess }) => {
   const API_URL = process.env.REACT_APP_API_URL;
   
   const [formData, setFormData] = useState({
@@ -16,8 +16,8 @@ const RenewLoanModal = ({ loan, outstandingInterest, onClose, onRenewalSuccess }
   });
   const [loading, setLoading] = useState(false);
   
-  // Calculate metrics for UI feedback
-  const oldPrincipal = parseFloat(loan.principal_amount) || 0;
+  // FIX: Use the passed 'currentPrincipal' (Reducing Balance) instead of original loan amount
+  const oldPrincipal = parseFloat(currentPrincipal) || parseFloat(loan.principal_amount) || 0;
   const totalDue = parseFloat(outstandingInterest) || 0;
   const paidNow = parseFloat(formData.interestPaid) || 0;
   
@@ -60,11 +60,11 @@ const RenewLoanModal = ({ loan, outstandingInterest, onClose, onRenewalSuccess }
         {/* Info Box */}
         <div className="alert alert-light border mb-3 small">
             <div className="d-flex justify-content-between">
-                <span>Current Principal:</span>
+                <span>Current Net Principal:</span>
                 <strong>₹{oldPrincipal.toFixed(2)}</strong>
             </div>
             <div className="d-flex justify-content-between text-danger">
-                <span>Total Interest Due:</span>
+                <span>Outstanding Interest Due:</span>
                 <strong>₹{totalDue.toFixed(2)}</strong>
             </div>
         </div>
