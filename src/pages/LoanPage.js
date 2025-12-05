@@ -11,12 +11,8 @@ import RenewLoanModal from '../components/RenewLoanModal';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-// ... (Styles remain same) ...
+// --- Styles ---
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1050 };
-const modalContentStyle = { backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '80%', maxWidth: '800px', maxHeight: '85vh', overflowY: 'auto', border: '1px solid #ccc', boxShadow: '0 5px 15px rgba(0, 0, 0, 0.2)' };
-const modalHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px' };
-const modalBodyStyle = { marginBottom: '20px' };
-const modalFooterStyle = { borderTop: '1px solid #eee', paddingTop: '15px', textAlign: 'right' };
 const hiddenPrintComponentStyle = { position: 'fixed', top: 0, left: 0, width: '210mm', minHeight: '297mm', zIndex: -1000, opacity: 0, pointerEvents: 'none', backgroundColor: 'white' };
 
 function LoanPage({ userRole }) {
@@ -27,19 +23,24 @@ function LoanPage({ userRole }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Action States
   const [settleAmount, setSettleAmount] = useState('');
   const [settleDiscount, setSettleDiscount] = useState('');
+  const [additionalAmount, setAdditionalAmount] = useState('');
+  
+  // Modals & Triggers
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
-  const [additionalAmount, setAdditionalAmount] = useState('');
 
+  // Calculated Data
   const [calculatedStats, setCalculatedStats] = useState(null);
   const [interestBreakdown, setInterestBreakdown] = useState([]);
 
   const invoiceRef = useRef();
 
+  // --- Print & PDF Logic ---
   const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false) });
 
   const handleSavePdf = async () => {
@@ -64,6 +65,7 @@ function LoanPage({ userRole }) {
     }
   };
 
+  // --- Financial Logic ---
   const getLiveBalance = () => {
     if (calculatedStats?.amountDue) return parseFloat(calculatedStats.amountDue);
     return 0;
@@ -85,6 +87,7 @@ function LoanPage({ userRole }) {
     if (val === '') setSettleAmount(''); else setSettleAmount(pay.toFixed(2));
   };
 
+  // --- API Actions ---
   const handleSettleAndClose = async () => {
     const payAmount = parseFloat(settleAmount) || 0;
     const discAmount = parseFloat(settleDiscount) || 0;
@@ -133,6 +136,7 @@ function LoanPage({ userRole }) {
     }
   };
 
+  // --- Effects ---
   useEffect(() => {
     const fetchLoanData = async () => {
       setIsLoading(true);
@@ -149,291 +153,488 @@ function LoanPage({ userRole }) {
     fetchLoanData();
   }, [id, refreshTrigger]);
 
-  if (isLoading) return <div className="text-center mt-5"><div className="spinner-border text-primary"></div></div>;
-  if (error) return <div className="alert alert-danger m-4">{error}</div>;
-  if (!loanData?.loanDetails) return <div className="alert alert-warning">Loan data missing.</div>;
+  // --- Loading/Error States ---
+  if (isLoading) return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}}></div></div>;
+  if (error) return <div className="alert alert-danger m-5 text-center shadow-sm">{error}</div>;
+  if (!loanData?.loanDetails) return <div className="alert alert-warning m-5">Loan data missing.</div>;
 
+  // --- Data Extraction ---
   const { loanDetails, transactions } = loanData;
   const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const formatDate = (date) => { try { return new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return 'N/A'; } };
+  const formatDateTime = (date) => { try { return new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour:'2-digit', minute:'2-digit' }); } catch (e) { return 'N/A'; } };
 
   const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement' && tx.payment_type !== 'discount') || [];
   const disbursementsMade = transactions?.filter(tx => tx.payment_type === 'disbursement') || [];
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
   
-  const renderSettlementSummary = () => {
-    if (loanDetails.status !== 'paid') return null;
-    const allTxs = transactions || [];
-    const payTxs = allTxs.filter(t => ['interest', 'principal', 'settlement'].includes(t.payment_type));
-    const discountTxs = allTxs.filter(t => t.payment_type === 'discount');
-    const totalPrincipal = parseFloat(loanDetails.principal_amount);
-    const totalCashPaid = payTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
-    const totalDiscount = discountTxs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
-    const totalSettledValue = totalCashPaid + totalDiscount;
-    const impliedInterest = totalSettledValue - totalPrincipal;
+  // Image URL Helper
+  const getImageUrl = (url) => {
+    if (!url) return null;
+    if (typeof url === 'object') return null; // Guard against raw buffers
+    if (url.startsWith('data:') || url.startsWith('http')) return url;
+    return `${API_URL}${url}`;
+  };
 
-    return (
-      <div className="card shadow-sm mb-4 border-success">
-        <div className="card-header bg-success text-white"><i className="bi bi-check-circle-fill me-2"></i>Settlement Summary (Closed)</div>
-        <div className="card-body">
-          <table className="table table-borderless table-sm mb-0">
-            <tbody>
-              <tr><td>Total Principal Disbursed</td><td className="text-end">{formatCurrency(totalPrincipal)}</td></tr>
-              <tr><td>+ Interest & Charges</td><td className="text-end">{formatCurrency(impliedInterest)}</td></tr>
-              <tr className="border-top"><td className="fw-bold">Total Value Settled</td><td className="text-end fw-bold">{formatCurrency(totalSettledValue)}</td></tr>
-              <tr><td className="text-success">- Total Cash Paid</td><td className="text-end text-success">-{formatCurrency(totalCashPaid)}</td></tr>
-              {totalDiscount > 0 && (<tr><td className="text-danger">- Discount / Waiver</td><td className="text-end text-danger">-{formatCurrency(totalDiscount)}</td></tr>)}
-              <tr className="border-top border-2"><td className="fw-bold">Outstanding Balance</td><td className="text-end fw-bold">₹0.00</td></tr>
-            </tbody>
-          </table>
-          <div className="text-center mt-3 small text-muted"><i className="bi bi-calendar-check me-1"></i>Loan settled on {loanDetails.closed_date ? formatDate(loanDetails.closed_date) : 'N/A'}</div>
-        </div>
-      </div>
-    );
+  // Status Colors
+  const getStatusBadge = (status) => {
+    switch(status) {
+        case 'active': return <span className="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 rounded-pill">ACTIVE</span>;
+        case 'overdue': return <span className="badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2 rounded-pill">OVERDUE</span>;
+        case 'paid': return <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary px-3 py-2 rounded-pill">CLOSED</span>;
+        default: return <span className="badge bg-light text-dark border px-3 py-2 rounded-pill">{status.toUpperCase()}</span>;
+    }
   };
 
   return (
-    <div className="container-fluid pt-3">
-      <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
-        <h2>Loan Details (ID: {loanDetails.id})</h2>
+    <div className="container-fluid bg-light min-vh-100 py-4 px-lg-5">
+      
+      {/* --- HEADER --- */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
         <div>
-          <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => setShowHistoryModal(true)}>View History</button>
-          {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
-            <button className="btn btn-success btn-sm me-2" onClick={() => setShowRenewModal(true)}><i className="bi bi-arrow-repeat me-1"></i> Renew</button>
-          )}
-          <Link to={`/loans/${id}/edit`} className="btn btn-warning btn-sm me-2">Edit Loan</Link>
-          <button className="btn btn-info btn-sm" onClick={() => setShowPrintModal(true)}>Print / Save Invoice</button>
-          {userRole === 'admin' && (
-            <button className="btn btn-danger btn-sm ms-2" onClick={handleDeleteLoan}><i className="bi bi-trash me-1"></i> Delete</button>
-          )}
+            <nav aria-label="breadcrumb">
+                <ol className="breadcrumb mb-1 small">
+                    <li className="breadcrumb-item"><Link to="/customers" className="text-decoration-none text-muted">Customers</Link></li>
+                    <li className="breadcrumb-item"><Link to={`/customers/${loanDetails.customer_id}`} className="text-decoration-none text-muted">{loanDetails.customer_name}</Link></li>
+                    <li className="breadcrumb-item active" aria-current="page">Loan #{loanDetails.book_loan_number}</li>
+                </ol>
+            </nav>
+            <div className="d-flex align-items-center gap-3">
+                <h2 className="fw-bold mb-0 text-dark">Loan Details</h2>
+                {getStatusBadge(loanDetails.status)}
+            </div>
+        </div>
+        
+        <div className="d-flex flex-wrap gap-2 mt-3 mt-md-0">
+            <button className="btn btn-white bg-white border border-secondary-subtle shadow-sm text-muted" onClick={() => setShowHistoryModal(true)}>
+                <i className="bi bi-clock-history me-1"></i> Full History
+            </button>
+            <button className="btn btn-white bg-white border border-secondary-subtle shadow-sm text-primary" onClick={() => setShowPrintModal(true)}>
+                <i className="bi bi-printer me-1"></i> Invoice
+            </button>
+            {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
+                <button className="btn btn-success text-white shadow-sm" onClick={() => setShowRenewModal(true)}>
+                    <i className="bi bi-arrow-repeat me-1"></i> Renew
+                </button>
+            )}
+            <Link to={`/loans/${id}/edit`} className="btn btn-warning text-dark shadow-sm">
+                <i className="bi bi-pencil me-1"></i> Edit
+            </Link>
+            {userRole === 'admin' && (
+                <button className="btn btn-outline-danger shadow-sm d-flex align-items-center" onClick={handleDeleteLoan}>
+                    <i className="bi bi-trash me-1"></i> Delete
+                </button>
+            )}
+        </div>
+      </div>
+
+      {/* --- KEY METRICS CARDS (5-Column Layout) --- */}
+      <div className="row g-2 mb-4">
+        <div className="col">
+            <div className="card border border-secondary-subtle shadow-sm h-100">
+                <div className="card-body p-2 border-start border-4 border-primary rounded-start">
+                    <div className="text-muted small text-uppercase fw-bold mb-1" style={{fontSize: '0.7rem'}}>Principal</div>
+                    <div className="fs-5 fw-bold text-dark">{formatCurrency(loanDetails.principal_amount)}</div>
+                </div>
+            </div>
+        </div>
+        <div className="col">
+            <div className="card border border-secondary-subtle shadow-sm h-100">
+                <div className="card-body p-2 border-start border-4 border-info rounded-start">
+                    <div className="text-muted small text-uppercase fw-bold mb-1" style={{fontSize: '0.7rem'}}>Rate</div>
+                    <div className="fs-5 fw-bold text-dark">{loanDetails.interest_rate}%</div>
+                </div>
+            </div>
+        </div>
+        <div className="col">
+            <div className="card border border-secondary-subtle shadow-sm h-100">
+                <div className="card-body p-2 border-start border-4 border-secondary rounded-start">
+                    <div className="text-muted small text-uppercase fw-bold mb-1" style={{fontSize: '0.7rem'}}>Pledged Date</div>
+                    <div className="fs-5 fw-bold text-dark">{formatDate(loanDetails.pledge_date)}</div>
+                </div>
+            </div>
+        </div>
+        <div className="col">
+            <div className="card border border-secondary-subtle shadow-sm h-100">
+                <div className="card-body p-2 border-start border-4 border-warning rounded-start">
+                    <div className="text-muted small text-uppercase fw-bold mb-1" style={{fontSize: '0.7rem'}}>Due Date</div>
+                    <div className="fs-5 fw-bold text-dark">{formatDate(loanDetails.due_date)}</div>
+                </div>
+            </div>
+        </div>
+        <div className="col">
+            <div className="card border border-secondary-subtle shadow-sm h-100 bg-white">
+                <div className={`card-body p-2 border-start border-4 rounded-start ${loanDetails.status === 'paid' ? 'border-success' : 'border-danger'}`}>
+                    <div className="text-muted small text-uppercase fw-bold mb-1" style={{fontSize: '0.7rem'}}>Outstanding</div>
+                    <div className={`fs-5 fw-bold ${loanDetails.status === 'paid' ? 'text-success' : 'text-danger'}`}>
+                        {loanDetails.status === 'paid' ? 'Settled' : formatCurrency(calculatedStats?.amountDue)}
+                    </div>
+                </div>
+            </div>
         </div>
       </div>
 
       <div className="row g-4">
+        {/* --- LEFT COLUMN: DETAILS & FINANCIALS --- */}
         <div className="col-lg-8">
-          <div className="card shadow-sm mb-4">
-            <div className="card-header">Customer Information</div>
-            <div className="card-body d-flex align-items-center">
-              <div>
-                <h5><Link to={`/customers/${loanDetails.customer_id}`}>{loanDetails.customer_name}</Link></h5>
-                <p className="mb-0 text-muted"><i className="bi bi-telephone me-1"></i> {loanDetails.phone_number}</p>
-                <p className="mb-0 text-muted small mt-1"><i className="bi bi-geo-alt me-1"></i> {loanDetails.address ? loanDetails.address : <span className="fst-italic">No address on file</span>}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card shadow-sm mb-4">
-            <div className="card-header">Loan Summary</div>
-            <div className="card-body">
-              <div className="row">
-                <div className="col-md-6 mb-2"><strong>Book Loan #:</strong> {loanDetails.book_loan_number}</div>
-                <div className="col-md-6 mb-2"><strong>Status:</strong> <span className={`badge bg-${loanDetails.status === 'overdue' ? 'danger' : loanDetails.status === 'paid' ? 'secondary' : loanDetails.status === 'renewed' ? 'info text-dark' : 'success'} ms-2`}>{loanDetails.status.toUpperCase()}</span></div>
-                <div className="col-md-6 mb-2"><strong>Principal:</strong> {formatCurrency(loanDetails.principal_amount)}</div>
-                <div className="col-md-6 mb-2"><strong>Rate:</strong> {loanDetails.interest_rate}% p.m.</div>
-                <div className="col-md-6 mb-2"><strong>Pledge Date:</strong> {formatDate(loanDetails.pledge_date)}</div>
-                <div className="col-md-6 mb-2"><strong>Due Date:</strong> {formatDate(loanDetails.due_date)}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card shadow-sm mb-4">
-            <div className="card-header">Pledged Item Details</div>
-            <div className="card-body">
-              <div className="d-flex align-items-start">
-                {loanDetails.item_image_data_url && (
-                  <img src={loanDetails.item_image_data_url} alt="Item" className="rounded border p-1 me-3" style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
-                )}
-                <div className="flex-grow-1">
-                  <h5 className="card-title mb-1">{loanDetails.description}</h5>
-                  <span className="badge bg-info text-dark mb-3">{loanDetails.item_type?.toUpperCase()}</span>
-                  <div className="row g-2 small">
-                    <div className="col-6"><div className="text-muted">Gross Weight:</div><div className="fw-bold">{loanDetails.gross_weight || loanDetails.weight || '0'} g</div></div>
-                    <div className="col-6"><div className="text-muted">Net Weight:</div><div className="fw-bold">{loanDetails.net_weight || '0'} g</div></div>
-                    <div className="col-6"><div className="text-muted">Purity:</div><div className="fw-bold">{loanDetails.purity || 'N/A'}</div></div>
-                    <div className="col-6"><div className="text-muted">Appraised Value:</div><div className="fw-bold">{formatCurrency(loanDetails.appraised_value)}</div></div>
-                  </div>
+            
+            {/* 1. Customer Details (UPDATED) */}
+            <div className="card border border-secondary-subtle shadow-sm mb-3">
+                <div className="card-header bg-white py-2 border-bottom">
+                    <h6 className="mb-0 fw-bold text-gray-800">Customer Details</h6>
                 </div>
-              </div>
+                <div className="card-body p-4">
+                    <div className="d-flex flex-column flex-sm-row gap-4 align-items-start">
+                        {/* Profile Pic */}
+                        <div className="flex-shrink-0">
+                             {getImageUrl(loanDetails.customer_image_url) ? (
+                                <img 
+                                    src={getImageUrl(loanDetails.customer_image_url)} 
+                                    alt="Customer" 
+                                    className="rounded-circle border shadow-sm object-fit-cover" 
+                                    style={{ width: '100px', height: '100px' }} 
+                                />
+                             ) : (
+                                <div className="bg-light rounded-circle d-flex align-items-center justify-content-center text-muted border" style={{ width: '100px', height: '100px' }}>
+                                    <i className="bi bi-person-fill fs-1"></i>
+                                </div>
+                             )}
+                        </div>
+                        
+                        {/* Details List */}
+                        <div className="flex-grow-1 w-100">
+                            <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                                <span className="text-secondary fw-medium">Customer Name:</span>
+                                <span className="fw-bold text-dark">
+                                    <Link to={`/customers/${loanDetails.customer_id}`} className="text-decoration-none text-dark">
+                                        {loanDetails.customer_name}
+                                    </Link>
+                                </span>
+                            </div>
+                            <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                                <span className="text-secondary fw-medium">Phone Number:</span>
+                                <span className="text-dark fw-medium">{loanDetails.phone_number}</span>
+                            </div>
+                            <div className="d-flex justify-content-between align-items-start">
+                                <span className="text-secondary fw-medium">Address:</span>
+                                <span className="text-dark text-end" style={{maxWidth: '60%'}}>
+                                    {loanDetails.address || <span className="text-muted fst-italic">No address provided</span>}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
 
-          {calculatedStats && (
-            <div className="card shadow-sm mb-4 border-primary">
-              <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <span><i className="bi bi-calculator me-2"></i>Loan Calculation Worksheet</span>
-                {loanDetails.status === 'paid' && <span className="badge bg-white text-success">SETTLED</span>}
-              </div>
-              <div className="card-body">
-                <div className="mb-3">
-                  <h6 className="text-muted text-uppercase small fw-bold">Principal Breakdown</h6>
-                  <div className="d-flex justify-content-between border-bottom pb-1">
-                    <span>Total Principal Disbursed</span>
-                    <span>{formatCurrency(loanDetails.principal_amount)}</span>
-                  </div>
-                  <div className="d-flex justify-content-between border-bottom pb-1 text-success">
-                    <span>- Principal Repaid</span>
-                    <span>- {formatCurrency(calculatedStats.principalPaid)}</span>
-                  </div>
-                  <div className="d-flex justify-content-between pt-1 fw-bold text-primary">
-                    <span>Net Principal Balance</span>
-                    <span>{formatCurrency(calculatedStats.outstandingPrincipal)}</span>
-                  </div>
+            {/* 2. Pledged Article Details (UPDATED) */}
+            <div className="card border border-secondary-subtle shadow-sm mb-4">
+                <div className="card-header bg-white py-2 border-bottom">
+                    <h6 className="mb-0 fw-bold text-gray-800">Pledged Item Details</h6>
                 </div>
+                <div className="card-body p-4">
+                    <div className="d-flex flex-column flex-sm-row gap-4 mb-4 border-bottom pb-3">
+                        {/* Item Image */}
+                        <div className="flex-shrink-0">
+                             {getImageUrl(loanDetails.item_image_data_url) ? (
+                                <img 
+                                    src={getImageUrl(loanDetails.item_image_data_url)} 
+                                    alt="Item" 
+                                    className="rounded border shadow-sm object-fit-cover" 
+                                    style={{ width: '100px', height: '100px' }} 
+                                />
+                             ) : (
+                                <div className="bg-light rounded d-flex align-items-center justify-content-center text-muted border" style={{ width: '100px', height: '100px' }}>
+                                    <i className="bi bi-image fs-1"></i>
+                                </div>
+                             )}
+                        </div>
+                        
+                        {/* Basic Info */}
+                        <div className="flex-grow-1">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                                <h5 className="fw-bold mb-0 text-dark">{loanDetails.description}</h5>
+                                <span className="badge bg-secondary">{loanDetails.item_type?.toUpperCase()}</span>
+                            </div>
+                            <div className="d-flex flex-wrap gap-3 text-muted small mt-2">
+                                <div className="bg-light px-2 py-1 rounded border">Gross: <strong className="text-dark">{loanDetails.gross_weight || loanDetails.weight || '0'}g</strong></div>
+                                <div className="bg-light px-2 py-1 rounded border">Net: <strong className="text-dark">{loanDetails.net_weight || '0'}g</strong></div>
+                                <div className="bg-light px-2 py-1 rounded border">Purity: <strong className="text-dark">{loanDetails.purity || '-'}</strong></div>
+                            </div>
+                        </div>
+                    </div>
 
-                <div className="mb-3">
-                  <h6 className="text-muted text-uppercase small fw-bold mt-4">Interest on Running Balance (Reducing)</h6>
-                  <div className="table-responsive">
-                    <table className="table table-sm table-striped table-bordered small mb-0">
-                      <thead className="table-light">
-                        <tr><th>Period</th><th className="text-end">On Balance</th><th className="text-end">Months</th><th className="text-end">Interest</th></tr>
-                      </thead>
-                      <tbody>
-                        {interestBreakdown.map((item, idx) => (
-                          <tr key={idx}>
-                            <td><div>{formatDate(item.date)} <span className="text-muted">to</span> {item.endDate ? formatDate(item.endDate) : 'Today'}</div><div className="text-muted fst-italic" style={{ fontSize: '0.85em' }}>{item.label}</div></td>
-                            <td className="text-end">{formatCurrency(item.amount)}</td>
-                            <td className="text-end">{parseFloat(item.months).toFixed(2)}</td>
-                            <td className="text-end fw-bold">{formatCurrency(item.interest)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="table-light">
-                        <tr><td colSpan="3" className="text-end fw-bold">Total Interest Accrued:</td><td className="text-end fw-bold">{formatCurrency(calculatedStats.totalInterestOwed)}</td></tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                    {/* NEW FIELDS REQUESTED */}
+                    <div className="row g-3">
+                        <div className="col-md-4">
+                            <div className="p-2 border rounded bg-light h-100">
+                                <small className="text-muted d-block mb-1">Book Loan Number</small>
+                                <span className="fw-bold text-primary fs-5">#{loanDetails.book_loan_number}</span>
+                            </div>
+                        </div>
+                        <div className="col-md-4">
+                            <div className="p-2 border rounded bg-light h-100">
+                                <small className="text-muted d-block mb-1">Appraised Value</small>
+                                <span className="fw-bold text-success fs-5">{formatCurrency(loanDetails.appraised_value)}</span>
+                            </div>
+                        </div>
+                        <div className="col-md-4">
+                            <div className="p-2 border rounded bg-light h-100">
+                                <small className="text-muted d-block mb-1">Quality/Remarks</small>
+                                <span className="text-dark fst-italic">{loanDetails.remarks || loanDetails.quality || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-3 border-top pt-2">
+                    <h6 className="small fw-bold text-secondary mb-2">Principal Breakdown</h6>
+                    <div className="table-responsive">
+                        <table className="table table-sm table-borderless small mb-0">
+                        <tbody>
+                            {interestBreakdown.map((item, index) => (
+                            <tr key={index}>
+                                <td className="text-muted">{item.label}</td>
+                                <td className="text-end fw-bold">₹{parseFloat(item.amount).toLocaleString()}</td>
+                                <td className="text-end text-danger">+ ₹{item.interest} (Int.)</td>
+                            </tr>
+                            ))}
+                        </tbody>
+                        </table>
+                    </div>
+                    </div>
                 </div>
-
-                <div className="bg-light p-3 rounded">
-                  <div className="d-flex justify-content-between mb-1"><span>Total Interest Accrued</span><span className="fw-bold">{formatCurrency(calculatedStats.totalInterestOwed)}</span></div>
-                  <div className="d-flex justify-content-between mb-1 text-success"><span>- Interest Paid</span><span>- {formatCurrency(calculatedStats.interestPaid)}</span></div>
-                  {discountGiven > 0 && (<div className="d-flex justify-content-between mb-1 text-danger"><span>- Discount / Waiver</span><span>- {formatCurrency(discountGiven)}</span></div>)}
-                  <div className="border-top border-secondary my-2"></div>
-                  <div className="d-flex justify-content-between align-items-center"><span className="fw-bold fs-5">Total Amount Due</span><span className="fw-bold fs-4 text-danger">{loanDetails.status === 'paid' ? '₹0.00' : formatCurrency(calculatedStats.amountDue)}</span></div>
-                  {loanDetails.status !== 'paid' && (<div className="text-end text-muted small fst-italic">(Principal: {formatCurrency(calculatedStats.outstandingPrincipal)} + Interest: {formatCurrency(parseFloat(calculatedStats.amountDue) - parseFloat(calculatedStats.outstandingPrincipal))})</div>)}
-                </div>
-              </div>
             </div>
-          )}
+
+            {/* 3. Financial Worksheet */}
+            {calculatedStats && (
+            <div className="card border border-secondary-subtle shadow-sm mb-4">
+                <div className="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
+                    <h6 className="mb-0 fw-bold text-primary"><i className="bi bi-calculator me-2"></i>Financial Worksheet</h6>
+                    {loanDetails.status === 'paid' && <span className="badge bg-success">LOAN SETTLED</span>}
+                </div>
+                <div className="card-body p-0">
+                    <div className="row g-0">
+                        {/* Summary Sidebar */}
+                        <div className="col-md-4 bg-light p-3 border-end">
+                            <div className="small text-muted fw-bold mb-2">Principal</div>
+                            <div className="d-flex justify-content-between mb-1 small">
+                                <span>Disbursed</span>
+                                <span className="fw-bold">{formatCurrency(loanDetails.principal_amount)}</span>
+                            </div>
+                            <div className="d-flex justify-content-between mb-3 small text-success">
+                                <span>Paid Back</span>
+                                <span>- {formatCurrency(calculatedStats.principalPaid)}</span>
+                            </div>
+                            <div className="p-2 bg-white rounded border mb-3 text-center">
+                                <small className="text-muted d-block" style={{fontSize: '0.7rem'}}>Current Principal</small>
+                                <span className="fw-bold text-primary">{formatCurrency(calculatedStats.outstandingPrincipal)}</span>
+                            </div>
+
+                            <div className="small text-muted fw-bold mb-2">Interest</div>
+                            <div className="d-flex justify-content-between mb-1 small">
+                                <span>Accrued</span>
+                                <span className="fw-bold">{formatCurrency(calculatedStats.totalInterestOwed)}</span>
+                            </div>
+                            <div className="d-flex justify-content-between mb-1 small text-success">
+                                <span>Paid</span>
+                                <span>- {formatCurrency(calculatedStats.interestPaid)}</span>
+                            </div>
+                            {discountGiven > 0 && (
+                                <div className="d-flex justify-content-between mb-1 small text-danger">
+                                    <span>Waived</span>
+                                    <span>- {formatCurrency(discountGiven)}</span>
+                                </div>
+                            )}
+                             <div className="border-top my-2"></div>
+                             <div className="d-flex justify-content-between align-items-center small">
+                                <span className="fw-bold">Net Interest</span>
+                                <span className="fw-bold text-danger">{formatCurrency(parseFloat(calculatedStats.amountDue) - parseFloat(calculatedStats.outstandingPrincipal))}</span>
+                            </div>
+                        </div>
+
+                        {/* Detailed Table */}
+                        <div className="col-md-8 p-3">
+                            <div className="table-responsive">
+                                <table className="table table-sm table-hover small mb-0">
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th>Period</th>
+                                            <th className="text-end">Bal</th>
+                                            <th className="text-end">Mos</th>
+                                            <th className="text-end">Int</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {interestBreakdown.map((item, idx) => (
+                                            <tr key={idx}>
+                                                <td>
+                                                    <div className="fw-bold" style={{fontSize: '0.75rem'}}>{formatDate(item.date)} - {item.endDate ? formatDate(item.endDate) : 'Today'}</div>
+                                                </td>
+                                                <td className="text-end">{formatCurrency(item.amount)}</td>
+                                                <td className="text-end">{parseFloat(item.months).toFixed(2)}</td>
+                                                <td className="text-end fw-bold">{formatCurrency(item.interest)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            {loanDetails.status !== 'paid' && (
+                                <div className="alert alert-primary d-flex align-items-center justify-content-between mt-3 mb-0 p-2">
+                                    <div className="small"><strong>Total Payable</strong></div>
+                                    <div className="fs-5 fw-bold">{formatCurrency(calculatedStats.amountDue)}</div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            )}
+            
+            {/* 4. Settlement Summary (Conditional) */}
+            {loanDetails.status === 'paid' && (
+                <div className="card border border-success shadow-sm mb-4">
+                    <div className="card-header bg-success text-white py-2">
+                        <i className="bi bi-check-circle-fill me-2"></i>Loan Closed
+                    </div>
+                    <div className="card-body p-3">
+                         <div className="row text-center small">
+                             <div className="col-4 border-end">
+                                 <span className="text-muted d-block">Settled Date</span>
+                                 <strong className="text-dark">{formatDate(loanDetails.closed_date)}</strong>
+                             </div>
+                             <div className="col-4 border-end">
+                                 <span className="text-muted d-block">Total Paid</span>
+                                 <strong className="text-success">{formatCurrency(transactions?.filter(t => ['interest','principal','settlement'].includes(t.payment_type)).reduce((s,t)=>s+parseFloat(t.amount_paid),0))}</strong>
+                             </div>
+                             <div className="col-4">
+                                 <span className="text-muted d-block">Discount</span>
+                                 <strong className="text-danger">{formatCurrency(discountGiven)}</strong>
+                             </div>
+                         </div>
+                    </div>
+                </div>
+            )}
         </div>
 
+        {/* --- RIGHT COLUMN: ACTIONS & HISTORY (FIXED) --- */}
         <div className="col-lg-4">
-          {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
-            <div className="card border-info shadow-sm mb-4">
-              <div className="card-header bg-info text-dark fw-bold">Disburse More Principal</div>
-              <div className="card-body">
-                <div className="d-flex">
-                  <input type="number" step="0.01" className="form-control form-control-sm me-2" value={additionalAmount} onChange={e => setAdditionalAmount(e.target.value)} placeholder="Amount (₹)" />
-                  <button onClick={handleAddPrincipal} className="btn btn-primary btn-sm">Add</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
-            <div className="card border-primary shadow-sm mb-4">
-              <div className="card-header bg-primary text-white fw-bold">Add Partial Payment</div>
-              <div className="card-body">
-                <p className="small text-muted mb-2">Log regular interest or principal payments here.</p>
-                <PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} />
-              </div>
-            </div>
-          )}
-
-          {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
-            <div className="card border-warning shadow-sm mb-4">
-              <div className="card-header bg-warning text-dark fw-bold">Settle & Close Loan</div>
-              <div className="card-body">
-                <p className="small text-muted mb-3">Finalize loan. Auto-calculates remaining.</p>
-                <div className="mb-2"><label className="form-label small fw-bold">Outstanding Balance</label><div className="form-control bg-light text-end fw-bold">{formatCurrency(calculatedStats?.amountDue)}</div></div>
-                <div className="row g-2 mb-3">
-                  <div className="col-6"><label className="form-label small">Cash Paid</label><input type="number" step="0.01" className="form-control" value={settleAmount} onChange={e => handleSettleAmountInput(e.target.value)} placeholder="₹" /></div>
-                  <div className="col-6"><label className="form-label small">Discount</label><input type="number" step="0.01" className="form-control" value={settleDiscount} onChange={e => handleDiscountInput(e.target.value)} placeholder="₹" /></div>
-                </div>
-                <button onClick={handleSettleAndClose} className="btn btn-success w-100 fw-bold"><i className="bi bi-check-circle-fill me-2"></i> CONFIRM SETTLEMENT</button>
-              </div>
-            </div>
-          )}
-
-          <div className="card shadow-sm mb-4">
-            <div className="card-header fw-bold">Transaction History</div>
-            <div className="card-body">
-                <div className="row">
-                    {/* Left Column: Payments */}
-                    <div className="col-6 border-end pe-3">
-                        <h6 className="text-success mb-3 border-bottom pb-2">Payments Received</h6>
-                        {paymentsReceived.length > 0 ? (
-                            <ul className="list-unstyled small mb-0">
-                                {paymentsReceived.map(tx => (
-                                    <li key={tx.id} className="mb-2 pb-2 border-bottom border-light">
-                                        <div className="d-flex justify-content-between">
-                                            <span>{formatDate(tx.payment_date)}</span>
-                                            <strong className="text-success">{formatCurrency(tx.amount_paid)}</strong>
-                                        </div>
-                                        <div className="text-muted d-flex justify-content-between" style={{fontSize: '0.85em'}}>
-                                            <span>{tx.payment_type.toUpperCase()}</span>
-                                            {tx.changed_by_username && <span>by: {tx.changed_by_username}</span>}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : <p className="text-muted small mb-0">No payments recorded.</p>}
+            
+            <div className="d-flex flex-column gap-3 sticky-top" style={{top: '20px', zIndex: 10}}>
+                
+                {/* A. Action Cards */}
+                {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
+                <>
+                    {/* 1. Add Payment */}
+                    <div className="card border border-secondary-subtle shadow-sm">
+                        <div className="card-header bg-primary text-white py-2 px-3">
+                            <div className="d-flex align-items-center small fw-bold"><i className="bi bi-cash-coin me-2"></i> Receive Payment</div>
+                        </div>
+                        <div className="card-body p-3">
+                             <PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} />
+                        </div>
                     </div>
 
-                    {/* Right Column: Disbursements */}
-                    <div className="col-6 ps-3">
-                        <h6 className="text-primary mb-3 border-bottom pb-2">Principal Disbursed</h6>
-                        {disbursementsMade.length > 0 ? (
-                            <ul className="list-unstyled small mb-0">
-                                {disbursementsMade.map(tx => (
-                                    <li key={tx.id} className="mb-2 pb-2 border-bottom border-light">
-                                        <div className="d-flex justify-content-between">
-                                            <span>{formatDate(tx.payment_date)}</span>
-                                            <strong className="text-primary">{formatCurrency(tx.amount_paid)}</strong>
+                    {/* 2. Disburse Principal */}
+                    <div className="card border border-secondary-subtle shadow-sm">
+                         <div className="card-body p-3">
+                            <label className="small fw-bold text-muted mb-2">Disburse Additional Principal</label>
+                            <div className="input-group input-group-sm">
+                                <span className="input-group-text">₹</span>
+                                <input type="number" className="form-control" placeholder="Amount" value={additionalAmount} onChange={e => setAdditionalAmount(e.target.value)} />
+                                <button className="btn btn-outline-primary" onClick={handleAddPrincipal}>Add</button>
+                            </div>
+                         </div>
+                    </div>
+
+                    {/* 3. Settle Loan */}
+                    <div className="card border border-secondary-subtle shadow-sm border-top border-4 border-success">
+                        <div className="card-body p-3">
+                            <h6 className="fw-bold text-success mb-3 small"><i className="bi bi-check2-all me-2"></i>Settle & Close Loan</h6>
+                            <div className="mb-2 p-2 bg-light rounded text-center border border-dashed">
+                                 <small className="text-muted">Total Outstanding</small>
+                                 <div className="fw-bold text-dark">{formatCurrency(calculatedStats?.amountDue)}</div>
+                            </div>
+                            <div className="row g-2 mb-2">
+                                 <div className="col-6">
+                                     <label className="small text-muted" style={{fontSize: '0.7rem'}}>Cash Paid</label>
+                                     <input type="number" className="form-control form-control-sm" placeholder="₹" value={settleAmount} onChange={e => handleSettleAmountInput(e.target.value)} />
+                                 </div>
+                                 <div className="col-6">
+                                     <label className="small text-muted" style={{fontSize: '0.7rem'}}>Discount</label>
+                                     <input type="number" className="form-control form-control-sm" placeholder="₹" value={settleDiscount} onChange={e => handleDiscountInput(e.target.value)} />
+                                 </div>
+                            </div>
+                            <button className="btn btn-success btn-sm w-100 fw-bold" onClick={handleSettleAndClose}>CLOSE LOAN</button>
+                        </div>
+                    </div>
+                </>
+                )}
+
+                {/* B. Transaction History (Fixed, No Scrollbar) */}
+                <div className="card border border-secondary-subtle shadow-sm">
+                    <div className="card-header bg-white fw-bold py-2 border-bottom small">Transaction History</div>
+                    <div className="card-body p-0">
+                        <div className="row g-0">
+                            {/* Left: Payments */}
+                            <div className="col-6 border-end">
+                                <div className="p-1 bg-light small fw-bold text-center text-success border-bottom" style={{fontSize: '0.7rem'}}>Payments In</div>
+                                <div className="p-2">
+                                    {paymentsReceived.length > 0 ? paymentsReceived.slice(0, 8).map(tx => (
+                                        <div key={tx.id} className="mb-2 pb-1 border-bottom border-light">
+                                            <div className="fw-bold text-success small">{formatCurrency(tx.amount_paid)}</div>
+                                            <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
+                                            <div className="text-muted fst-italic" style={{fontSize: '0.6rem'}}>by: {tx.changed_by_username || 'sys'}</div>
                                         </div>
-                                        <div className="text-muted d-flex justify-content-between" style={{fontSize: '0.85em'}}>
-                                            <span>DISBURSEMENT</span>
-                                            {tx.changed_by_username && <span>by: {tx.changed_by_username}</span>}
+                                    )) : <div className="text-center text-muted small py-3">No payments</div>}
+                                </div>
+                            </div>
+                            
+                            {/* Right: Disbursements */}
+                            <div className="col-6">
+                                <div className="p-1 bg-light small fw-bold text-center text-primary border-bottom" style={{fontSize: '0.7rem'}}>Disbursements</div>
+                                <div className="p-2">
+                                    {disbursementsMade.length > 0 ? disbursementsMade.slice(0, 8).map(tx => (
+                                        <div key={tx.id} className="mb-2 pb-1 border-bottom border-light">
+                                            <div className="fw-bold text-primary small">{formatCurrency(tx.amount_paid)}</div>
+                                            <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
+                                            <div className="text-muted fst-italic" style={{fontSize: '0.6rem'}}>by: {tx.changed_by_username || 'sys'}</div>
                                         </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : <p className="text-muted small mb-0">Initial only.</p>}
+                                    )) : <div className="text-center text-muted small py-3">Initial only</div>}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-          </div>
-          
-          {renderSettlementSummary()}
+
         </div>
       </div>
 
-      <div className="mt-3 mb-5"><Link to={`/customers/${loanDetails.customer_id}`} className="btn btn-secondary btn-sm">Back to Customer</Link></div>
-
+      {/* --- MODALS --- */}
       {showPrintModal && (
         <div style={modalOverlayStyle}>
-          <div style={modalContentStyle}>
-            <div style={modalHeaderStyle}>
-              <h5 className="modal-title">Invoice Preview</h5>
+          <div className="bg-white rounded-3 overflow-hidden shadow" style={{width: '90%', maxWidth:'800px', maxHeight:'90vh', display:'flex', flexDirection:'column'}}>
+            <div className="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
+              <h5 className="m-0">Invoice Preview</h5>
               <button type="button" className="btn-close" onClick={() => setShowPrintModal(false)}></button>
             </div>
-            <div style={modalBodyStyle}>
-              <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                <div style={{ border: '1px solid #ddd', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', padding: '10px' }}>
-                  {loanDetails && <PrintableInvoice loanDetails={loanDetails} />}
-                </div>
+            <div className="p-4 overflow-auto bg-secondary bg-opacity-10" style={{flex:1}}>
+              <div className="d-flex justify-content-center">
+                  <div className="bg-white shadow-sm p-1" style={{maxWidth: '210mm'}}> 
+                     {loanDetails && <PrintableInvoice loanDetails={loanDetails} />}
+                  </div>
               </div>
             </div>
-            <div style={modalFooterStyle}>
-              <button type="button" className="btn btn-secondary me-2" onClick={() => setShowPrintModal(false)}>Close</button>
-              <button type="button" className="btn btn-success me-2" onClick={handleSavePdf}>Save as PDF</button>
-              <button type="button" className="btn btn-primary" onClick={handleReactPrint}>Print</button>
+            <div className="p-3 border-top bg-white text-end">
+              <button className="btn btn-secondary me-2" onClick={() => setShowPrintModal(false)}>Close</button>
+              <button className="btn btn-outline-primary me-2" onClick={handleSavePdf}><i className="bi bi-download me-1"></i> PDF</button>
+              <button className="btn btn-primary" onClick={handleReactPrint}><i className="bi bi-printer-fill me-1"></i> Print</button>
             </div>
           </div>
         </div>
       )}
 
       {showHistoryModal && <LoanHistoryModal loanId={id} onClose={() => setShowHistoryModal(false)} />}
+      
       {showRenewModal && (
         <RenewLoanModal
           loan={loanDetails}
