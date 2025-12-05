@@ -196,7 +196,8 @@ function LoanPage({ userRole }) {
                 <ol className="breadcrumb mb-1 small">
                     <li className="breadcrumb-item"><Link to="/customers" className="text-decoration-none text-muted">Customers</Link></li>
                     <li className="breadcrumb-item"><Link to={`/customers/${loanDetails.customer_id}`} className="text-decoration-none text-muted">{loanDetails.customer_name}</Link></li>
-                    <li className="breadcrumb-item active" aria-current="page">Loan #{loanDetails.book_loan_number}</li>
+                    {/* UPDATED BREADCRUMB HERE */}
+                    <li className="breadcrumb-item active" aria-current="page">Loan #{loanDetails.book_loan_number} - {loanDetails.id}</li>
                 </ol>
             </nav>
             <div className="d-flex align-items-center gap-3">
@@ -384,22 +385,6 @@ function LoanPage({ userRole }) {
                             </div>
                         </div>
                     </div>
-                    <div className="mt-3 border-top pt-2">
-                    <h6 className="small fw-bold text-secondary mb-2">Principal Breakdown</h6>
-                    <div className="table-responsive">
-                        <table className="table table-sm table-borderless small mb-0">
-                        <tbody>
-                            {interestBreakdown.map((item, index) => (
-                            <tr key={index}>
-                                <td className="text-muted">{item.label}</td>
-                                <td className="text-end fw-bold">₹{parseFloat(item.amount).toLocaleString()}</td>
-                                <td className="text-end text-danger">+ ₹{item.interest} (Int.)</td>
-                            </tr>
-                            ))}
-                        </tbody>
-                        </table>
-                    </div>
-                    </div>
                 </div>
             </div>
 
@@ -466,7 +451,8 @@ function LoanPage({ userRole }) {
                                         {interestBreakdown.map((item, idx) => (
                                             <tr key={idx}>
                                                 <td>
-                                                    <div className="fw-bold" style={{fontSize: '0.75rem'}}>{formatDate(item.date)} - {item.endDate ? formatDate(item.endDate) : 'Today'}</div>
+                                                    <div className="fw-bold" style={{fontSize: '0.75rem'}}>{item.label}</div>
+                                                    <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDate(item.date)} - {item.endDate ? formatDate(item.endDate) : 'Today'}</div>
                                                 </td>
                                                 <td className="text-end">{formatCurrency(item.amount)}</td>
                                                 <td className="text-end">{parseFloat(item.months).toFixed(2)}</td>
