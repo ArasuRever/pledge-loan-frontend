@@ -450,7 +450,7 @@ function LoanPage({ userRole }) {
             </div>
             )}
 
-            {/* --- Principal & Interest Breakdown Card --- */}
+            {/* --- Principal & Interest Breakdown Card (Below Worksheet) --- */}
             {calculatedStats && (
             <div className="card border border-primary shadow-sm mb-4">
                 <div className="card-header bg-primary text-white py-2 border-bottom">
@@ -541,7 +541,7 @@ function LoanPage({ userRole }) {
                 </>
                 )}
 
-                {/* B. Transaction History (Updated) */}
+                {/* B. Transaction History (Improved to Show Discount) */}
                 <div className="card border border-secondary-subtle shadow-sm">
                     <div className="card-header bg-white fw-bold py-2 border-bottom small">Transaction History</div>
                     <div className="card-body p-0">
