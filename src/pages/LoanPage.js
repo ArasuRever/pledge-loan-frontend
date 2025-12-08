@@ -216,6 +216,69 @@ function LoanPage({ userRole }) {
   const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement') || [];
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
 
+  // --- FIX: Process Breakdown to show Incremental instead of Cumulative ---
+  const processedBreakdown = useMemo(() => {
+    if (!interestBreakdown || interestBreakdown.length === 0) return [];
+    if (!loanDetails) return [];
+
+    // 1. Sort Chronologically (Oldest First) to chain dates correctly
+    // UPDATED: Added tie-breaker to ensure Accruals come BEFORE Payments on same date
+    const sorted = [...interestBreakdown].sort((a, b) => {
+        const dateA = new Date(a.endDate || a.date);
+        const dateB = new Date(b.endDate || b.date);
+        const diff = dateA - dateB;
+        if (diff !== 0) return diff; // Sort by date first
+
+        // Tie-breaker: If dates are equal, Accruals (non-payments) come BEFORE Payments
+        const isPaymentA = a.status === 'payment';
+        const isPaymentB = b.status === 'payment';
+        
+        if (!isPaymentA && isPaymentB) return -1; // Accrual < Payment
+        if (isPaymentA && !isPaymentB) return 1;  // Payment > Accrual
+        return 0;
+    });
+
+    // Track the end date of the previous interest row
+    let lastInterestEndDate = loanDetails.pledge_date; 
+
+    const fixed = sorted.map(item => {
+        // Identify Interest Rows (assuming non-payments with interest > 0)
+        const isInterestRow = item.status !== 'payment' && parseFloat(item.interest || 0) > 0;
+
+        if (isInterestRow) {
+            const principal = parseFloat(item.amount);
+            const rate = parseFloat(loanDetails.interest_rate);
+            const interest = parseFloat(item.interest);
+
+            // A. Fix 'Months': Derive mathematically from the Interest Amount
+            // Formula: Time = Interest / (Principal * (Rate/100))
+            let correctedMonths = item.months;
+            if (principal && rate && interest) {
+                correctedMonths = interest / (principal * (rate / 100));
+            }
+
+            // B. Fix 'Start Date': Use the end date of the previous period
+            const correctedStartDate = lastInterestEndDate;
+            
+            // Update tracker: current row's end date becomes next row's start date
+            if (item.endDate) {
+                lastInterestEndDate = item.endDate;
+            }
+
+            return {
+                ...item,
+                date: correctedStartDate, // Overwrite with chained start date
+                months: correctedMonths   // Overwrite with derived months
+            };
+        }
+        
+        return item;
+    });
+
+    // Display IN ORDER (Oldest to Newest)
+    return fixed;
+  }, [interestBreakdown, loanDetails]);
+
   // --- Loading/Error States ---
   if (isLoading) return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}}></div></div>;
   if (error) return <div className="alert alert-danger m-5 text-center shadow-sm">{error}</div>;
@@ -415,7 +478,7 @@ function LoanPage({ userRole }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {[...interestBreakdown].reverse().map((item, idx) => {
+                                        {processedBreakdown.map((item, idx) => {
                                             const isPayment = item.status === 'payment';
                                             return (
                                                 <tr key={idx} className={isPayment ? 'table-success bg-opacity-10' : ''}>
@@ -468,7 +531,7 @@ function LoanPage({ userRole }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {interestBreakdown.filter(item => item.status === 'accrued').map((item, idx) => (
+                                {processedBreakdown.filter(item => item.status === 'accrued').map((item, idx) => (
                                     <tr key={idx}>
                                         <td className="ps-3">
                                             <div className="fw-bold text-dark small">{item.label}</div>
