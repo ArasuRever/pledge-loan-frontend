@@ -24,10 +24,15 @@ const EditLoanPage = () => {
   
   // --- Photo State ---
   const [photoSource, setPhotoSource] = useState('upload');
-  const [itemPhoto, setItemPhoto] = useState(null); // New file/blob to upload
-  const [photoPreview, setPhotoPreview] = useState(null); // URL for display
-  const [removeItemImage, setRemoveItemImage] = useState(false); // Flag to delete existing image on backend
+  const [itemPhoto, setItemPhoto] = useState(null); 
+  const [photoPreview, setPhotoPreview] = useState(null); 
+  const [removeItemImage, setRemoveItemImage] = useState(false); 
   
+  // --- Transaction State ---
+  const [transactions, setTransactions] = useState([]);
+  const [newTx, setNewTx] = useState({ date: '', type: 'interest', amount: '' });
+  const [addingTx, setAddingTx] = useState(false);
+
   // --- Camera State ---
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -53,12 +58,15 @@ const EditLoanPage = () => {
     return `${API_URL}${url}`;
   };
 
+  const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+
   // --- Effects ---
   useEffect(() => {
     const fetchLoan = async () => {
       try {
         const response = await axios.get(`${API_URL}/api/loans/${id}`);
         const data = response.data.loanDetails;
+        const txs = response.data.transactions || [];
         
         setFormData({
           book_loan_number: data.book_loan_number,
@@ -78,6 +86,7 @@ const EditLoanPage = () => {
             setPhotoPreview(getImageUrl(data.item_image_data_url));
         }
 
+        setTransactions(txs);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching loan:", err);
@@ -87,7 +96,6 @@ const EditLoanPage = () => {
     };
     fetchLoan();
     
-    // Cleanup camera on unmount
     return () => stopCameraStream();
   }, [id, API_URL]);
 
@@ -106,6 +114,43 @@ const EditLoanPage = () => {
       });
   };
 
+  // --- Transaction Handlers ---
+  const handleAddTransaction = async () => {
+      if(!newTx.date || !newTx.amount || parseFloat(newTx.amount) <= 0) return alert("Valid date and amount required");
+      
+      if(!window.confirm(`Add ${newTx.type.toUpperCase()} payment of ${newTx.amount} on ${newTx.date}?`)) return;
+
+      setAddingTx(true);
+      try {
+          const token = localStorage.getItem('token');
+          await axios.post(`${API_URL}/api/transactions`, {
+              loan_id: id,
+              amount_paid: newTx.amount,
+              payment_type: newTx.type,
+              custom_date: newTx.date // Sending the backdate
+          }, { headers: { Authorization: `Bearer ${token}` } });
+          
+          alert("Transaction added.");
+          
+          // Refresh list
+          const refresh = await axios.get(`${API_URL}/api/loans/${id}`);
+          setTransactions(refresh.data.transactions);
+          setNewTx({ date: '', type: 'interest', amount: '' });
+
+      } catch (err) {
+          alert(err.response?.data?.error || "Failed to add transaction");
+      } finally {
+          setAddingTx(false);
+      }
+  };
+
+  const handleDeleteTransaction = async (txId) => {
+      if(!window.confirm("Are you sure? This will remove the transaction record.")) return;
+      // Note: Delete endpoint for transactions wasn't explicitly requested but logic would be similar
+      // For now, we only implemented Add as per prompt. 
+      alert("Delete functionality requires backend permission."); 
+  };
+
   // --- Photo Handlers ---
   const stopCameraStream = () => {
     if (streamRef.current) { 
@@ -121,7 +166,7 @@ const EditLoanPage = () => {
     if (file) { 
         setItemPhoto(file); 
         setPhotoPreview(URL.createObjectURL(file)); 
-        setRemoveItemImage(false); // We are adding a new one, not just removing
+        setRemoveItemImage(false);
         stopCameraStream(); 
     }
   };
@@ -129,7 +174,6 @@ const EditLoanPage = () => {
   const startCamera = async () => {
     stopCameraStream(); 
     setItemPhoto(null); 
-    // Do NOT clear photoPreview yet, allows user to cancel camera and keep old image
     setShowCameraModal(true);
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true }); 
@@ -168,8 +212,6 @@ const EditLoanPage = () => {
       setItemPhoto(null);
       setPhotoPreview(null);
       setRemoveItemImage(true);
-      
-      // Clear file input if exists
       const fileInput = document.getElementById('itemPhotoInput'); 
       if (fileInput) fileInput.value = null;
   };
@@ -179,7 +221,6 @@ const EditLoanPage = () => {
     e.preventDefault();
     setSaving(true);
     
-    // Use FormData for file uploads
     const data = new FormData();
     Object.keys(formData).forEach(key => {
         data.append(key, formData[key]);
@@ -190,12 +231,15 @@ const EditLoanPage = () => {
         data.append('itemPhoto', itemPhoto, fileName);
     }
 
-    // Flag to tell backend to nullify the existing image column
     data.append('removeItemImage', removeItemImage);
 
     try {
+      const token = localStorage.getItem('token');
       await axios.put(`${API_URL}/api/loans/${id}`, data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 
+              'Content-Type': 'multipart/form-data',
+              Authorization: `Bearer ${token}`
+          }
       });
       alert('Loan updated successfully.');
       navigate(`/loans/${id}`);
@@ -216,7 +260,7 @@ const EditLoanPage = () => {
 
   return (
     <div className="container mt-4" style={{maxWidth: '800px'}}>
-      <div className="card shadow-sm">
+      <div className="card shadow-sm mb-5">
         <div className="card-header bg-warning text-dark">
           <h4 className="mb-0"><i className="bi bi-pencil-square me-2"></i>Edit Loan #{id}</h4>
         </div>
@@ -330,6 +374,70 @@ const EditLoanPage = () => {
             </div>
           </form>
         </div>
+      </div>
+
+      {/* --- Section: Transaction History (Manual Log) --- */}
+      <div className="card shadow-sm border-secondary-subtle">
+          <div className="card-header bg-secondary text-white">
+              <h5 className="mb-0 small fw-bold text-uppercase"><i className="bi bi-clock-history me-2"></i>Transaction History (Manual Log)</h5>
+          </div>
+          <div className="card-body p-4">
+              <div className="alert alert-info small mb-3">
+                  <i className="bi bi-info-circle me-2"></i>
+                  Use this section to log <strong>past/missing payments</strong>. The system will automatically calculate how much covers interest vs principal based on the date selected.
+              </div>
+
+              {/* Add Transaction Form */}
+              <div className="row g-2 align-items-end mb-4 border rounded p-3 bg-light mx-0">
+                  <div className="col-md-4">
+                      <label className="small text-muted fw-bold">Date</label>
+                      <input type="date" className="form-control form-control-sm" value={newTx.date} onChange={e => setNewTx({...newTx, date: e.target.value})} />
+                  </div>
+                  <div className="col-md-3">
+                      <label className="small text-muted fw-bold">Type</label>
+                      <select className="form-select form-select-sm" value={newTx.type} onChange={e => setNewTx({...newTx, type: e.target.value})}>
+                          <option value="interest">Interest</option>
+                          <option value="principal">Principal</option>
+                          <option value="settlement">Settlement</option>
+                      </select>
+                  </div>
+                  <div className="col-md-3">
+                      <label className="small text-muted fw-bold">Amount (₹)</label>
+                      <input type="number" className="form-control form-control-sm" placeholder="0.00" value={newTx.amount} onChange={e => setNewTx({...newTx, amount: e.target.value})} />
+                  </div>
+                  <div className="col-md-2">
+                      <button className="btn btn-success btn-sm w-100" onClick={handleAddTransaction} disabled={addingTx}>
+                          {addingTx ? '...' : 'Add'}
+                      </button>
+                  </div>
+              </div>
+
+              {/* Transaction Table */}
+              <div className="table-responsive">
+                  <table className="table table-hover table-sm small align-middle">
+                      <thead className="table-light">
+                          <tr>
+                              <th>Date</th>
+                              <th>Type</th>
+                              <th className="text-end">Amount</th>
+                              <th className="text-end">User</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          {transactions.length > 0 ? transactions.map(tx => (
+                              <tr key={tx.id}>
+                                  <td>{formatDateForInput(tx.payment_date)}</td>
+                                  <td><span className="badge bg-light text-dark border">{tx.payment_type.toUpperCase()}</span></td>
+                                  <td className="text-end fw-bold text-success">{formatCurrency(tx.amount_paid)}</td>
+                                  <td className="text-end text-muted fst-italic">{tx.changed_by_username || 'sys'}</td>
+                              </tr>
+                          )) : (
+                              <tr><td colSpan="4" className="text-center text-muted py-3">No transactions found.</td></tr>
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
       </div>
 
       {/* Camera Modal */}
