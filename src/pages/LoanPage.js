@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import axios from 'axios';
@@ -153,38 +153,72 @@ function LoanPage({ userRole }) {
     fetchLoanData();
   }, [id, refreshTrigger]);
 
-  // --- Loading/Error States ---
-  if (isLoading) return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}}></div></div>;
-  if (error) return <div className="alert alert-danger m-5 text-center shadow-sm">{error}</div>;
-  if (!loanData?.loanDetails) return <div className="alert alert-warning m-5">Loan data missing.</div>;
-
-  // --- Data Extraction ---
-  const { loanDetails, transactions } = loanData;
+  // --- Data Extraction & Helpers ---
+  const { loanDetails, transactions } = loanData || {};
   const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const formatDate = (date) => { try { return new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return 'N/A'; } };
-  const formatDateTime = (date) => { try { return new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour:'2-digit', minute:'2-digit' }); } catch (e) { return 'N/A'; } };
-
-  const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement' && tx.payment_type !== 'discount') || [];
-  const disbursementsMade = transactions?.filter(tx => tx.payment_type === 'disbursement') || [];
-  const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
   
-  // Image URL Helper
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+        const d = new Date(dateString);
+        if (isNaN(d.getTime())) return 'Invalid Date';
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (e) { return 'Error'; }
+  };
+  
+  const formatDateTime = (date) => { try { return new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour:'2-digit', minute:'2-digit' }); } catch (e) { return 'N/A'; } };
+  
   const getImageUrl = (url) => {
     if (!url) return null;
-    if (typeof url === 'object') return null; // Guard against raw buffers
+    if (typeof url === 'object') return null; 
     if (url.startsWith('data:') || url.startsWith('http')) return url;
     return `${API_URL}${url}`;
   };
 
-  // Status Colors
   const getStatusBadge = (status) => {
     switch(status) {
         case 'active': return <span className="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 rounded-pill">ACTIVE</span>;
         case 'overdue': return <span className="badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2 rounded-pill">OVERDUE</span>;
         case 'paid': return <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary px-3 py-2 rounded-pill">CLOSED</span>;
-        default: return <span className="badge bg-light text-dark border px-3 py-2 rounded-pill">{status.toUpperCase()}</span>;
+        default: return <span className="badge bg-light text-dark border px-3 py-2 rounded-pill">{status?.toUpperCase()}</span>;
     }
   };
+
+  // --- Logic: Previous Balance for Disbursements ---
+  const enrichedDisbursements = useMemo(() => {
+    if (!transactions) return [];
+    
+    const chronoTxs = [...transactions].sort((a,b) => new Date(a.payment_date) - new Date(b.payment_date));
+    let runningPrincipal = 0;
+    
+    // Attempt to infer base principal start point
+    const disbs = transactions.filter(t => t.payment_type === 'disbursement');
+    const topUpTotal = disbs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
+    const initialPrincipal = (parseFloat(loanDetails?.principal_amount || 0) - topUpTotal);
+    
+    runningPrincipal = initialPrincipal; 
+
+    const enriched = [];
+    chronoTxs.forEach(tx => {
+        const amt = parseFloat(tx.amount_paid);
+        if (tx.payment_type === 'disbursement') {
+            enriched.push({ ...tx, prevBalance: runningPrincipal });
+            runningPrincipal += amt;
+        } else if (tx.payment_type === 'principal') {
+            runningPrincipal -= amt;
+        }
+    });
+    
+    return enriched.sort((a,b) => new Date(b.payment_date) - new Date(a.payment_date));
+  }, [transactions, loanDetails]);
+
+  const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement' && tx.payment_type !== 'discount') || [];
+  const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
+
+  // --- Loading/Error States ---
+  if (isLoading) return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}}></div></div>;
+  if (error) return <div className="alert alert-danger m-5 text-center shadow-sm">{error}</div>;
+  if (!loanData?.loanDetails) return <div className="alert alert-warning m-5">Loan data missing.</div>;
 
   return (
     <div className="container-fluid bg-light min-vh-100 py-4 px-lg-5">
@@ -196,8 +230,7 @@ function LoanPage({ userRole }) {
                 <ol className="breadcrumb mb-1 small">
                     <li className="breadcrumb-item"><Link to="/customers" className="text-decoration-none text-muted">Customers</Link></li>
                     <li className="breadcrumb-item"><Link to={`/customers/${loanDetails.customer_id}`} className="text-decoration-none text-muted">{loanDetails.customer_name}</Link></li>
-                    {/* UPDATED BREADCRUMB HERE */}
-                    <li className="breadcrumb-item active" aria-current="page">Loan #{loanDetails.book_loan_number} - {loanDetails.id}</li>
+                    <li className="breadcrumb-item active" aria-current="page">Loan #{loanDetails.book_loan_number}</li>
                 </ol>
             </nav>
             <div className="d-flex align-items-center gap-3">
@@ -229,7 +262,7 @@ function LoanPage({ userRole }) {
         </div>
       </div>
 
-      {/* --- KEY METRICS CARDS (5-Column Layout) --- */}
+      {/* --- KEY METRICS --- */}
       <div className="row g-2 mb-4">
         <div className="col">
             <div className="card border border-secondary-subtle shadow-sm h-100">
@@ -276,41 +309,27 @@ function LoanPage({ userRole }) {
       </div>
 
       <div className="row g-4">
-        {/* --- LEFT COLUMN: DETAILS & FINANCIALS --- */}
+        {/* --- LEFT COLUMN --- */}
         <div className="col-lg-8">
             
-            {/* 1. Customer Details (UPDATED) */}
+            {/* Customer Details */}
             <div className="card border border-secondary-subtle shadow-sm mb-3">
                 <div className="card-header bg-white py-2 border-bottom">
                     <h6 className="mb-0 fw-bold text-gray-800">Customer Details</h6>
                 </div>
                 <div className="card-body p-4">
                     <div className="d-flex flex-column flex-sm-row gap-4 align-items-start">
-                        {/* Profile Pic */}
                         <div className="flex-shrink-0">
                              {getImageUrl(loanDetails.customer_image_url) ? (
-                                <img 
-                                    src={getImageUrl(loanDetails.customer_image_url)} 
-                                    alt="Customer" 
-                                    className="rounded-circle border shadow-sm object-fit-cover" 
-                                    style={{ width: '100px', height: '100px' }} 
-                                />
+                                <img src={getImageUrl(loanDetails.customer_image_url)} alt="Customer" className="rounded-circle border shadow-sm object-fit-cover" style={{ width: '100px', height: '100px' }} />
                              ) : (
-                                <div className="bg-light rounded-circle d-flex align-items-center justify-content-center text-muted border" style={{ width: '100px', height: '100px' }}>
-                                    <i className="bi bi-person-fill fs-1"></i>
-                                </div>
+                                <div className="bg-light rounded-circle d-flex align-items-center justify-content-center text-muted border" style={{ width: '100px', height: '100px' }}><i className="bi bi-person-fill fs-1"></i></div>
                              )}
                         </div>
-                        
-                        {/* Details List */}
                         <div className="flex-grow-1 w-100">
                             <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                                 <span className="text-secondary fw-medium">Customer Name:</span>
-                                <span className="fw-bold text-dark">
-                                    <Link to={`/customers/${loanDetails.customer_id}`} className="text-decoration-none text-dark">
-                                        {loanDetails.customer_name}
-                                    </Link>
-                                </span>
+                                <span className="fw-bold text-dark"><Link to={`/customers/${loanDetails.customer_id}`} className="text-decoration-none text-dark">{loanDetails.customer_name}</Link></span>
                             </div>
                             <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                                 <span className="text-secondary fw-medium">Phone Number:</span>
@@ -318,39 +337,27 @@ function LoanPage({ userRole }) {
                             </div>
                             <div className="d-flex justify-content-between align-items-start">
                                 <span className="text-secondary fw-medium">Address:</span>
-                                <span className="text-dark text-end" style={{maxWidth: '60%'}}>
-                                    {loanDetails.address || <span className="text-muted fst-italic">No address provided</span>}
-                                </span>
+                                <span className="text-dark text-end" style={{maxWidth: '60%'}}>{loanDetails.address || <span className="text-muted fst-italic">No address provided</span>}</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* 2. Pledged Article Details (UPDATED) */}
+            {/* Pledged Item */}
             <div className="card border border-secondary-subtle shadow-sm mb-4">
                 <div className="card-header bg-white py-2 border-bottom">
                     <h6 className="mb-0 fw-bold text-gray-800">Pledged Item Details</h6>
                 </div>
                 <div className="card-body p-4">
                     <div className="d-flex flex-column flex-sm-row gap-4 mb-4 border-bottom pb-3">
-                        {/* Item Image */}
                         <div className="flex-shrink-0">
                              {getImageUrl(loanDetails.item_image_data_url) ? (
-                                <img 
-                                    src={getImageUrl(loanDetails.item_image_data_url)} 
-                                    alt="Item" 
-                                    className="rounded border shadow-sm object-fit-cover" 
-                                    style={{ width: '100px', height: '100px' }} 
-                                />
+                                <img src={getImageUrl(loanDetails.item_image_data_url)} alt="Item" className="rounded border shadow-sm object-fit-cover" style={{ width: '100px', height: '100px' }} />
                              ) : (
-                                <div className="bg-light rounded d-flex align-items-center justify-content-center text-muted border" style={{ width: '100px', height: '100px' }}>
-                                    <i className="bi bi-image fs-1"></i>
-                                </div>
+                                <div className="bg-light rounded d-flex align-items-center justify-content-center text-muted border" style={{ width: '100px', height: '100px' }}><i className="bi bi-image fs-1"></i></div>
                              )}
                         </div>
-                        
-                        {/* Basic Info */}
                         <div className="flex-grow-1">
                             <div className="d-flex justify-content-between align-items-start mb-2">
                                 <h5 className="fw-bold mb-0 text-dark">{loanDetails.description}</h5>
@@ -363,32 +370,15 @@ function LoanPage({ userRole }) {
                             </div>
                         </div>
                     </div>
-
-                    {/* NEW FIELDS REQUESTED */}
                     <div className="row g-3">
-                        <div className="col-md-4">
-                            <div className="p-2 border rounded bg-light h-100">
-                                <small className="text-muted d-block mb-1">Book Loan Number</small>
-                                <span className="fw-bold text-primary fs-5">#{loanDetails.book_loan_number}</span>
-                            </div>
-                        </div>
-                        <div className="col-md-4">
-                            <div className="p-2 border rounded bg-light h-100">
-                                <small className="text-muted d-block mb-1">Appraised Value</small>
-                                <span className="fw-bold text-success fs-5">{formatCurrency(loanDetails.appraised_value)}</span>
-                            </div>
-                        </div>
-                        <div className="col-md-4">
-                            <div className="p-2 border rounded bg-light h-100">
-                                <small className="text-muted d-block mb-1">Quality/Remarks</small>
-                                <span className="text-dark fst-italic">{loanDetails.remarks || loanDetails.quality || 'N/A'}</span>
-                            </div>
-                        </div>
+                        <div className="col-md-4"><div className="p-2 border rounded bg-light h-100"><small className="text-muted d-block mb-1">Book Loan Number</small><span className="fw-bold text-primary fs-5">#{loanDetails.book_loan_number}</span></div></div>
+                        <div className="col-md-4"><div className="p-2 border rounded bg-light h-100"><small className="text-muted d-block mb-1">Appraised Value</small><span className="fw-bold text-success fs-5">{formatCurrency(loanDetails.appraised_value)}</span></div></div>
+                        <div className="col-md-4"><div className="p-2 border rounded bg-light h-100"><small className="text-muted d-block mb-1">Quality/Remarks</small><span className="text-dark fst-italic">{loanDetails.remarks || loanDetails.quality || 'N/A'}</span></div></div>
                     </div>
                 </div>
             </div>
 
-            {/* 3. Financial Worksheet */}
+            {/* Financial Worksheet */}
             {calculatedStats && (
             <div className="card border border-secondary-subtle shadow-sm mb-4">
                 <div className="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
@@ -400,69 +390,53 @@ function LoanPage({ userRole }) {
                         {/* Summary Sidebar */}
                         <div className="col-md-4 bg-light p-3 border-end">
                             <div className="small text-muted fw-bold mb-2">Principal</div>
-                            <div className="d-flex justify-content-between mb-1 small">
-                                <span>Disbursed</span>
-                                <span className="fw-bold">{formatCurrency(loanDetails.principal_amount)}</span>
-                            </div>
-                            <div className="d-flex justify-content-between mb-3 small text-success">
-                                <span>Paid Back</span>
-                                <span>- {formatCurrency(calculatedStats.principalPaid)}</span>
-                            </div>
-                            <div className="p-2 bg-white rounded border mb-3 text-center">
-                                <small className="text-muted d-block" style={{fontSize: '0.7rem'}}>Current Principal</small>
-                                <span className="fw-bold text-primary">{formatCurrency(calculatedStats.outstandingPrincipal)}</span>
-                            </div>
-
+                            <div className="d-flex justify-content-between mb-1 small"><span>Disbursed</span><span className="fw-bold">{formatCurrency(loanDetails.principal_amount)}</span></div>
+                            <div className="d-flex justify-content-between mb-3 small text-success"><span>Paid Back</span><span>- {formatCurrency(calculatedStats.principalPaid)}</span></div>
+                            <div className="p-2 bg-white rounded border mb-3 text-center"><small className="text-muted d-block" style={{fontSize: '0.7rem'}}>Current Principal</small><span className="fw-bold text-primary">{formatCurrency(calculatedStats.outstandingPrincipal)}</span></div>
                             <div className="small text-muted fw-bold mb-2">Interest</div>
-                            <div className="d-flex justify-content-between mb-1 small">
-                                <span>Accrued</span>
-                                <span className="fw-bold">{formatCurrency(calculatedStats.totalInterestOwed)}</span>
-                            </div>
-                            <div className="d-flex justify-content-between mb-1 small text-success">
-                                <span>Paid</span>
-                                <span>- {formatCurrency(calculatedStats.interestPaid)}</span>
-                            </div>
-                            {discountGiven > 0 && (
-                                <div className="d-flex justify-content-between mb-1 small text-danger">
-                                    <span>Waived</span>
-                                    <span>- {formatCurrency(discountGiven)}</span>
-                                </div>
-                            )}
+                            <div className="d-flex justify-content-between mb-1 small"><span>Accrued</span><span className="fw-bold">{formatCurrency(calculatedStats.totalInterestOwed)}</span></div>
+                            <div className="d-flex justify-content-between mb-1 small text-success"><span>Paid</span><span>- {formatCurrency(calculatedStats.interestPaid)}</span></div>
+                            {discountGiven > 0 && (<div className="d-flex justify-content-between mb-1 small text-danger"><span>Waived</span><span>- {formatCurrency(discountGiven)}</span></div>)}
                              <div className="border-top my-2"></div>
-                             <div className="d-flex justify-content-between align-items-center small">
-                                <span className="fw-bold">Net Interest</span>
-                                <span className="fw-bold text-danger">{formatCurrency(parseFloat(calculatedStats.amountDue) - parseFloat(calculatedStats.outstandingPrincipal))}</span>
-                            </div>
+                             <div className="d-flex justify-content-between align-items-center small"><span className="fw-bold">Net Interest</span><span className="fw-bold text-danger">{formatCurrency(parseFloat(calculatedStats.amountDue) - parseFloat(calculatedStats.outstandingPrincipal))}</span></div>
                         </div>
 
-                        {/* Detailed Table */}
+                        {/* Detailed Table (Sequential Order) */}
                         <div className="col-md-8 p-3">
                             <div className="table-responsive">
-                                <table className="table table-sm table-hover small mb-0">
+                                <table className="table table-hover small mb-0 align-middle">
                                     <thead className="table-light">
                                         <tr>
                                             <th>Period</th>
                                             <th className="text-end">Bal</th>
                                             <th className="text-end">Mos</th>
-                                            <th className="text-end">Int</th>
+                                            <th className="text-end">Amt</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {interestBreakdown.map((item, idx) => (
-                                            <tr key={idx}>
-                                                <td>
-                                                    <div className="fw-bold" style={{fontSize: '0.75rem'}}>{item.label}</div>
-                                                    <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDate(item.date)} - {item.endDate ? formatDate(item.endDate) : 'Today'}</div>
-                                                </td>
-                                                <td className="text-end">{formatCurrency(item.amount)}</td>
-                                                <td className="text-end">{parseFloat(item.months).toFixed(2)}</td>
-                                                <td className="text-end fw-bold">{formatCurrency(item.interest)}</td>
-                                            </tr>
-                                        ))}
+                                        {[...interestBreakdown].reverse().map((item, idx) => {
+                                            const isPayment = item.status === 'payment';
+                                            return (
+                                                <tr key={idx} className={isPayment ? 'table-success bg-opacity-10' : ''}>
+                                                    <td>
+                                                        <div className={`fw-bold ${isPayment ? 'text-success' : ''}`} style={{fontSize: '0.75rem'}}>{item.label}</div>
+                                                        <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDate(item.date)} {item.endDate ? `- ${formatDate(item.endDate)}` : ''}</div>
+                                                    </td>
+                                                    <td className={`text-end ${isPayment ? 'text-muted' : ''}`}>
+                                                        {isPayment ? '-' : formatCurrency(item.amount)}
+                                                    </td>
+                                                    <td className="text-end">
+                                                        {item.months ? parseFloat(item.months).toFixed(2) : '-'}
+                                                    </td>
+                                                    <td className={`text-end fw-bold ${isPayment ? 'text-success' : ''}`}>
+                                                        {isPayment ? formatCurrency(item.amount) : formatCurrency(item.interest)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
-                            
                             {loanDetails.status !== 'paid' && (
                                 <div className="alert alert-primary d-flex align-items-center justify-content-between mt-3 mb-0 p-2">
                                     <div className="small"><strong>Total Payable</strong></div>
@@ -474,52 +448,71 @@ function LoanPage({ userRole }) {
                 </div>
             </div>
             )}
+
+            {/* --- NEW: Principal & Interest Breakdown Card (MOVED HERE) --- */}
+            {calculatedStats && (
+            <div className="card border border-primary shadow-sm mb-4">
+                <div className="card-header bg-primary text-white py-2 border-bottom">
+                    <h6 className="mb-0 fw-bold"><i className="bi bi-list-columns-reverse me-2"></i>Principal & Interest Breakdown</h6>
+                </div>
+                <div className="card-body p-0">
+                    <div className="table-responsive">
+                        <table className="table table-hover mb-0 align-middle">
+                            <thead className="table-light">
+                                <tr>
+                                    <th className="ps-3">Description / Type</th>
+                                    <th>Period</th>
+                                    <th className="text-end">Principal</th>
+                                    <th className="text-end pe-3">Interest</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {interestBreakdown.filter(item => item.status === 'accrued').map((item, idx) => (
+                                    <tr key={idx}>
+                                        <td className="ps-3">
+                                            <div className="fw-bold text-dark small">{item.label}</div>
+                                        </td>
+                                        <td className="text-muted small">
+                                            {formatDate(item.date)} - {formatDate(item.endDate)}
+                                            <span className="badge bg-light text-dark border ms-2">{parseFloat(item.months).toFixed(2)} mos</span>
+                                        </td>
+                                        <td className="text-end small fw-medium">{formatCurrency(item.amount)}</td>
+                                        <td className="text-end small fw-bold text-primary pe-3">{formatCurrency(item.interest)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            )}
             
-            {/* 4. Settlement Summary (Conditional) */}
+            {/* Settlement Summary */}
             {loanDetails.status === 'paid' && (
                 <div className="card border border-success shadow-sm mb-4">
-                    <div className="card-header bg-success text-white py-2">
-                        <i className="bi bi-check-circle-fill me-2"></i>Loan Closed
-                    </div>
+                    <div className="card-header bg-success text-white py-2"><i className="bi bi-check-circle-fill me-2"></i>Loan Closed</div>
                     <div className="card-body p-3">
                          <div className="row text-center small">
-                             <div className="col-4 border-end">
-                                 <span className="text-muted d-block">Settled Date</span>
-                                 <strong className="text-dark">{formatDate(loanDetails.closed_date)}</strong>
-                             </div>
-                             <div className="col-4 border-end">
-                                 <span className="text-muted d-block">Total Paid</span>
-                                 <strong className="text-success">{formatCurrency(transactions?.filter(t => ['interest','principal','settlement'].includes(t.payment_type)).reduce((s,t)=>s+parseFloat(t.amount_paid),0))}</strong>
-                             </div>
-                             <div className="col-4">
-                                 <span className="text-muted d-block">Discount</span>
-                                 <strong className="text-danger">{formatCurrency(discountGiven)}</strong>
-                             </div>
-                         </div>
+                             <div className="col-4 border-end"><span className="text-muted d-block">Settled Date</span><strong className="text-dark">{formatDate(loanDetails.closed_date)}</strong></div>
+                             <div className="col-4 border-end"><span className="text-muted d-block">Total Paid</span><strong className="text-success">{formatCurrency(transactions?.filter(t => ['interest','principal','settlement'].includes(t.payment_type)).reduce((s,t)=>s+parseFloat(t.amount_paid),0))}</strong></div>
+                             <div className="col-4"><span className="text-muted d-block">Discount</span><strong className="text-danger">{formatCurrency(discountGiven)}</strong></div>
+                          </div>
                     </div>
                 </div>
             )}
         </div>
 
-        {/* --- RIGHT COLUMN: ACTIONS & HISTORY (FIXED) --- */}
+        {/* --- RIGHT COLUMN --- */}
         <div className="col-lg-4">
-            
             <div className="d-flex flex-column gap-3 sticky-top" style={{top: '20px', zIndex: 10}}>
                 
-                {/* A. Action Cards */}
+                {/* Actions */}
                 {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                 <>
-                    {/* 1. Add Payment */}
                     <div className="card border border-secondary-subtle shadow-sm">
-                        <div className="card-header bg-primary text-white py-2 px-3">
-                            <div className="d-flex align-items-center small fw-bold"><i className="bi bi-cash-coin me-2"></i> Receive Payment</div>
-                        </div>
-                        <div className="card-body p-3">
-                             <PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} />
-                        </div>
+                        <div className="card-header bg-primary text-white py-2 px-3"><div className="d-flex align-items-center small fw-bold"><i className="bi bi-cash-coin me-2"></i> Receive Payment</div></div>
+                        <div className="card-body p-3"><PaymentForm loanId={id} onPaymentAdded={() => setRefreshTrigger(t => t + 1)} /></div>
                     </div>
-
-                    {/* 2. Disburse Principal */}
                     <div className="card border border-secondary-subtle shadow-sm">
                          <div className="card-body p-3">
                             <label className="small fw-bold text-muted mb-2">Disburse Additional Principal</label>
@@ -530,8 +523,6 @@ function LoanPage({ userRole }) {
                             </div>
                          </div>
                     </div>
-
-                    {/* 3. Settle Loan */}
                     <div className="card border border-secondary-subtle shadow-sm border-top border-4 border-success">
                         <div className="card-body p-3">
                             <h6 className="fw-bold text-success mb-3 small"><i className="bi bi-check2-all me-2"></i>Settle & Close Loan</h6>
@@ -540,14 +531,8 @@ function LoanPage({ userRole }) {
                                  <div className="fw-bold text-dark">{formatCurrency(calculatedStats?.amountDue)}</div>
                             </div>
                             <div className="row g-2 mb-2">
-                                 <div className="col-6">
-                                     <label className="small text-muted" style={{fontSize: '0.7rem'}}>Cash Paid</label>
-                                     <input type="number" className="form-control form-control-sm" placeholder="₹" value={settleAmount} onChange={e => handleSettleAmountInput(e.target.value)} />
-                                 </div>
-                                 <div className="col-6">
-                                     <label className="small text-muted" style={{fontSize: '0.7rem'}}>Discount</label>
-                                     <input type="number" className="form-control form-control-sm" placeholder="₹" value={settleDiscount} onChange={e => handleDiscountInput(e.target.value)} />
-                                 </div>
+                                 <div className="col-6"><label className="small text-muted" style={{fontSize: '0.7rem'}}>Cash Paid</label><input type="number" className="form-control form-control-sm" placeholder="₹" value={settleAmount} onChange={e => handleSettleAmountInput(e.target.value)} /></div>
+                                 <div className="col-6"><label className="small text-muted" style={{fontSize: '0.7rem'}}>Discount</label><input type="number" className="form-control form-control-sm" placeholder="₹" value={settleDiscount} onChange={e => handleDiscountInput(e.target.value)} /></div>
                             </div>
                             <button className="btn btn-success btn-sm w-100 fw-bold" onClick={handleSettleAndClose}>CLOSE LOAN</button>
                         </div>
@@ -555,7 +540,7 @@ function LoanPage({ userRole }) {
                 </>
                 )}
 
-                {/* B. Transaction History (Fixed, No Scrollbar) */}
+                {/* B. Transaction History (Standard Size) */}
                 <div className="card border border-secondary-subtle shadow-sm">
                     <div className="card-header bg-white fw-bold py-2 border-bottom small">Transaction History</div>
                     <div className="card-body p-0">
@@ -566,6 +551,7 @@ function LoanPage({ userRole }) {
                                 <div className="p-2">
                                     {paymentsReceived.length > 0 ? paymentsReceived.slice(0, 8).map(tx => (
                                         <div key={tx.id} className="mb-2 pb-1 border-bottom border-light">
+                                            <span className="badge bg-light text-dark border mb-1" style={{fontSize: '0.65rem'}}>{tx.payment_type.toUpperCase()}</span>
                                             <div className="fw-bold text-success small">{formatCurrency(tx.amount_paid)}</div>
                                             <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
                                             <div className="text-muted fst-italic" style={{fontSize: '0.6rem'}}>by: {tx.changed_by_username || 'sys'}</div>
@@ -578,8 +564,9 @@ function LoanPage({ userRole }) {
                             <div className="col-6">
                                 <div className="p-1 bg-light small fw-bold text-center text-primary border-bottom" style={{fontSize: '0.7rem'}}>Disbursements</div>
                                 <div className="p-2">
-                                    {disbursementsMade.length > 0 ? disbursementsMade.slice(0, 8).map(tx => (
+                                    {enrichedDisbursements.length > 0 ? enrichedDisbursements.slice(0, 8).map(tx => (
                                         <div key={tx.id} className="mb-2 pb-1 border-bottom border-light">
+                                            <div className="text-muted" style={{fontSize: '0.65rem'}}>Prev: {formatCurrency(tx.prevBalance)}</div>
                                             <div className="fw-bold text-primary small">{formatCurrency(tx.amount_paid)}</div>
                                             <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
                                             <div className="text-muted fst-italic" style={{fontSize: '0.6rem'}}>by: {tx.changed_by_username || 'sys'}</div>
@@ -591,7 +578,6 @@ function LoanPage({ userRole }) {
                     </div>
                 </div>
             </div>
-
         </div>
       </div>
 
@@ -604,11 +590,7 @@ function LoanPage({ userRole }) {
               <button type="button" className="btn-close" onClick={() => setShowPrintModal(false)}></button>
             </div>
             <div className="p-4 overflow-auto bg-secondary bg-opacity-10" style={{flex:1}}>
-              <div className="d-flex justify-content-center">
-                  <div className="bg-white shadow-sm p-1" style={{maxWidth: '210mm'}}> 
-                     {loanDetails && <PrintableInvoice loanDetails={loanDetails} />}
-                  </div>
-              </div>
+              <div className="d-flex justify-content-center"><div className="bg-white shadow-sm p-1" style={{maxWidth: '210mm'}}>{loanDetails && <PrintableInvoice loanDetails={loanDetails} />}</div></div>
             </div>
             <div className="p-3 border-top bg-white text-end">
               <button className="btn btn-secondary me-2" onClick={() => setShowPrintModal(false)}>Close</button>
@@ -627,10 +609,7 @@ function LoanPage({ userRole }) {
           outstandingInterest={calculatedStats ? parseFloat(calculatedStats.outstandingInterest) : 0}
           currentPrincipal={calculatedStats ? parseFloat(calculatedStats.outstandingPrincipal) : 0}
           onClose={() => setShowRenewModal(false)}
-          onRenewalSuccess={(newLoanId) => {
-            setShowRenewModal(false);
-            navigate(`/loans/${newLoanId}`);
-          }}
+          onRenewalSuccess={(newLoanId) => { setShowRenewModal(false); navigate(`/loans/${newLoanId}`); }}
         />
       )}
 
