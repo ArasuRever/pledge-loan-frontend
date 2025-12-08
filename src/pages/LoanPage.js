@@ -212,7 +212,8 @@ function LoanPage({ userRole }) {
     return enriched.sort((a,b) => new Date(b.payment_date) - new Date(a.payment_date));
   }, [transactions, loanDetails]);
 
-  const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement' && tx.payment_type !== 'discount') || [];
+  // FIX: Include 'discount' in payments history list
+  const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement') || [];
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
 
   // --- Loading/Error States ---
@@ -449,7 +450,7 @@ function LoanPage({ userRole }) {
             </div>
             )}
 
-            {/* --- NEW: Principal & Interest Breakdown Card (MOVED HERE) --- */}
+            {/* --- Principal & Interest Breakdown Card --- */}
             {calculatedStats && (
             <div className="card border border-primary shadow-sm mb-4">
                 <div className="card-header bg-primary text-white py-2 border-bottom">
@@ -540,7 +541,7 @@ function LoanPage({ userRole }) {
                 </>
                 )}
 
-                {/* B. Transaction History (Standard Size) */}
+                {/* B. Transaction History (Updated) */}
                 <div className="card border border-secondary-subtle shadow-sm">
                     <div className="card-header bg-white fw-bold py-2 border-bottom small">Transaction History</div>
                     <div className="card-body p-0">
@@ -551,8 +552,10 @@ function LoanPage({ userRole }) {
                                 <div className="p-2">
                                     {paymentsReceived.length > 0 ? paymentsReceived.slice(0, 8).map(tx => (
                                         <div key={tx.id} className="mb-2 pb-1 border-bottom border-light">
-                                            <span className="badge bg-light text-dark border mb-1" style={{fontSize: '0.65rem'}}>{tx.payment_type.toUpperCase()}</span>
-                                            <div className="fw-bold text-success small">{formatCurrency(tx.amount_paid)}</div>
+                                            <span className={`badge border mb-1 ${tx.payment_type === 'discount' ? 'bg-warning text-dark' : 'bg-light text-dark'}`} style={{fontSize: '0.65rem'}}>{tx.payment_type.toUpperCase()}</span>
+                                            <div className={`fw-bold small ${tx.payment_type === 'discount' ? 'text-danger' : 'text-success'}`}>
+                                                {tx.payment_type === 'discount' ? '-' : ''}{formatCurrency(tx.amount_paid)}
+                                            </div>
                                             <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
                                             <div className="text-muted fst-italic" style={{fontSize: '0.6rem'}}>by: {tx.changed_by_username || 'sys'}</div>
                                         </div>
