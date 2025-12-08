@@ -212,9 +212,11 @@ function LoanPage({ userRole }) {
     return enriched.sort((a,b) => new Date(b.payment_date) - new Date(a.payment_date));
   }, [transactions, loanDetails]);
 
-  const paymentsReceived = transactions?.filter(tx => tx.payment_type !== 'disbursement') || [];
+  // FIX: EXCLUDE 'discount' from Payments In list so it doesn't look like a payment
+  const paymentsReceived = transactions?.filter(tx => !['disbursement', 'discount'].includes(tx.payment_type)) || [];
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
-  // Calculate total paid explicitly from stats
+  
+  // Explicitly calculate Total Paid for display
   const totalPaidBack = calculatedStats ? (parseFloat(calculatedStats.principalPaid) + parseFloat(calculatedStats.interestPaid)) : 0;
 
   // --- FIX: Process Breakdown to show Incremental instead of Cumulative ---
@@ -222,22 +224,28 @@ function LoanPage({ userRole }) {
     if (!interestBreakdown || interestBreakdown.length === 0) return [];
     if (!loanDetails) return [];
 
-    // 1. Sort Chronologically (Oldest First)
+    // 1. Sort Chronologically (Oldest First) to chain dates correctly
+    // UPDATED: Added tie-breaker to ensure Accruals come BEFORE Payments on same date
     const sorted = [...interestBreakdown].sort((a, b) => {
         const dateA = new Date(a.endDate || a.date);
         const dateB = new Date(b.endDate || b.date);
         const diff = dateA - dateB;
-        if (diff !== 0) return diff; 
+        if (diff !== 0) return diff; // Sort by date first
+
+        // Tie-breaker: If dates are equal, Accruals (non-payments) come BEFORE Payments
         const isPaymentA = a.status === 'payment';
         const isPaymentB = b.status === 'payment';
-        if (!isPaymentA && isPaymentB) return -1;
-        if (isPaymentA && !isPaymentB) return 1;
+        
+        if (!isPaymentA && isPaymentB) return -1; // Accrual < Payment
+        if (isPaymentA && !isPaymentB) return 1;  // Payment > Accrual
         return 0;
     });
 
+    // Track the end date of the previous interest row
     let lastInterestEndDate = loanDetails.pledge_date; 
 
     const fixed = sorted.map(item => {
+        // Identify Interest Rows (assuming non-payments with interest > 0)
         const isInterestRow = item.status !== 'payment' && parseFloat(item.interest || 0) > 0;
 
         if (isInterestRow) {
@@ -245,28 +253,36 @@ function LoanPage({ userRole }) {
             const rate = parseFloat(loanDetails.interest_rate);
             const interest = parseFloat(item.interest);
 
+            // A. Fix 'Months': Derive mathematically from the Interest Amount
+            // Formula: Time = Interest / (Principal * (Rate/100))
             let correctedMonths = item.months;
             if (principal && rate && interest) {
                 correctedMonths = interest / (principal * (rate / 100));
             }
 
+            // B. Fix 'Start Date': Use the end date of the previous period
             const correctedStartDate = lastInterestEndDate;
+            
+            // Update tracker: current row's end date becomes next row's start date
             if (item.endDate) {
                 lastInterestEndDate = item.endDate;
             }
 
             return {
                 ...item,
-                date: correctedStartDate, 
-                months: correctedMonths 
+                date: correctedStartDate, // Overwrite with chained start date
+                months: correctedMonths   // Overwrite with derived months
             };
         }
+        
         return item;
     });
 
+    // Display IN ORDER (Oldest to Newest)
     return fixed;
   }, [interestBreakdown, loanDetails]);
 
+  // --- Loading/Error States ---
   if (isLoading) return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}}></div></div>;
   if (error) return <div className="alert alert-danger m-5 text-center shadow-sm">{error}</div>;
   if (!loanData?.loanDetails) return <div className="alert alert-warning m-5">Loan data missing.</div>;
@@ -438,25 +454,26 @@ function LoanPage({ userRole }) {
                 </div>
                 <div className="card-body p-0">
                     <div className="row g-0">
-                        {/* Summary Sidebar - UPDATED with Total Paid & Discount */}
+                        {/* Summary Sidebar */}
                         <div className="col-md-4 bg-light p-3 border-end">
                             <div className="small text-muted fw-bold mb-2">Principal</div>
                             <div className="d-flex justify-content-between mb-1 small"><span>Disbursed</span><span className="fw-bold">{formatCurrency(loanDetails.principal_amount)}</span></div>
                             <div className="d-flex justify-content-between mb-3 small text-success"><span>Paid Back</span><span>- {formatCurrency(calculatedStats.principalPaid)}</span></div>
-                            
                             <div className="p-2 bg-white rounded border mb-3 text-center"><small className="text-muted d-block" style={{fontSize: '0.7rem'}}>Current Principal</small><span className="fw-bold text-primary">{formatCurrency(calculatedStats.outstandingPrincipal)}</span></div>
-                            
                             <div className="small text-muted fw-bold mb-2">Interest</div>
                             <div className="d-flex justify-content-between mb-1 small"><span>Accrued</span><span className="fw-bold">{formatCurrency(calculatedStats.totalInterestOwed)}</span></div>
                             <div className="d-flex justify-content-between mb-1 small text-success"><span>Paid</span><span>- {formatCurrency(calculatedStats.interestPaid)}</span></div>
                             
+                            {/* --- UPDATED SUMMARY --- */}
                             <div className="border-top my-2"></div>
-                            {/* NEW: Explicit Total Paid and Discount display */}
                             <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Total Paid</span><span className="text-success">{formatCurrency(totalPaidBack)}</span></div>
-                            <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Discount</span><span className="text-danger">{formatCurrency(discountGiven)}</span></div>
+                            {discountGiven > 0 && (
+                                <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Discount</span><span className="text-danger">{formatCurrency(discountGiven)}</span></div>
+                            )}
+                             <div className="d-flex justify-content-between align-items-center small pt-2 border-top mt-2"><span className="fw-bold">Net Interest</span><span className="fw-bold text-danger">{formatCurrency(parseFloat(calculatedStats.amountDue) - parseFloat(calculatedStats.outstandingPrincipal))}</span></div>
                         </div>
 
-                        {/* Detailed Table */}
+                        {/* Detailed Table (Sequential Order) */}
                         <div className="col-md-8 p-3">
                             <div className="table-responsive">
                                 <table className="table table-hover small mb-0 align-middle">
@@ -504,7 +521,7 @@ function LoanPage({ userRole }) {
             </div>
             )}
 
-            {/* --- Principal & Interest Breakdown Card --- */}
+            {/* --- Principal & Interest Breakdown Card (Below Worksheet) --- */}
             {calculatedStats && (
             <div className="card border border-primary shadow-sm mb-4">
                 <div className="card-header bg-primary text-white py-2 border-bottom">
@@ -595,7 +612,7 @@ function LoanPage({ userRole }) {
                 </>
                 )}
 
-                {/* B. Transaction History */}
+                {/* B. Transaction History (Improved to Show Discount) */}
                 <div className="card border border-secondary-subtle shadow-sm">
                     <div className="card-header bg-white fw-bold py-2 border-bottom small">Transaction History</div>
                     <div className="card-body p-0">
