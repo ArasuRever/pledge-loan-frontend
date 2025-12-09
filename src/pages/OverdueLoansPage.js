@@ -2,11 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import NoticeModal from '../components/NoticeModal'; // Ensure you created this file from the previous step
+import NoticeModal from '../components/NoticeModal'; 
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-// Changed from 'export const' to just 'const'
 const OverdueLoansPage = () => {
   const navigate = useNavigate();
   const [loans, setLoans] = useState([]);
@@ -19,19 +18,33 @@ const OverdueLoansPage = () => {
   useEffect(() => {
     const fetchOverdueLoans = async () => {
       try {
-        // --- CACHE BUSTER ADDED ---
+        // 1. Get the token
+        const token = localStorage.getItem('token');
+        
+        // 2. Add Cache Buster
         const cacheBuster = Date.now();
         const url = `${API_URL}/api/loans/overdue?t=${cacheBuster}`;
-        const response = await axios.get(url);
+        
+        // 3. Send Request with Headers
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${token}` // <--- FIXED: Added Auth Header
+            }
+        });
+        
         setLoans(response.data);
       } catch (err) {
         console.error("Error fetching overdue loans:", err);
+        // Optional: Redirect to login if unauthorized
+        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+            navigate('/login');
+        }
       } finally {
         setLoading(false);
       }
     };
     fetchOverdueLoans();
-  }, []);
+  }, [navigate]);
 
   const getDaysOverdue = (dueDate) => {
       const due = new Date(dueDate);
@@ -41,7 +54,7 @@ const OverdueLoansPage = () => {
   };
 
   const handleNoticeClick = (e, loan) => {
-      e.stopPropagation(); // Stop row click
+      e.stopPropagation(); 
       setSelectedLoan(loan);
       setShowNoticeModal(true);
   };
@@ -76,7 +89,6 @@ const OverdueLoansPage = () => {
                   loans.map(loan => {
                     const days = getDaysOverdue(loan.due_date);
                     return (
-                        // --- CLICKABLE ROW (Navigates to Loan Details) ---
                         <tr 
                             key={loan.id} 
                             style={{cursor: 'pointer'}} 
@@ -92,7 +104,6 @@ const OverdueLoansPage = () => {
                                 </span>
                             </td>
                             <td className="text-end pe-4">
-                                {/* --- NOTICE BUTTON (Opens Modal) --- */}
                                 <button 
                                     className="btn btn-sm btn-dark" 
                                     onClick={(e) => handleNoticeClick(e, loan)}
@@ -110,7 +121,6 @@ const OverdueLoansPage = () => {
         </div>
       </div>
 
-      {/* --- SEPARATE COMPONENT FOR NOTICE GENERATION --- */}
       <NoticeModal 
         show={showNoticeModal} 
         onClose={() => setShowNoticeModal(false)} 
@@ -121,5 +131,4 @@ const OverdueLoansPage = () => {
   );
 };
 
-// --- ADDED DEFAULT EXPORT ---
 export default OverdueLoansPage;

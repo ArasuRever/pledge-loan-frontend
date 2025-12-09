@@ -136,6 +136,32 @@ function LoanPage({ userRole }) {
     }
   };
 
+  // --- Undo / Delete Transaction ---
+  const handleDeleteTransaction = async (txId) => {
+      if(!window.confirm("Are you sure you want to delete this transaction?\n\nThis action cannot be undone.")) return;
+      try {
+          const token = localStorage.getItem('token');
+          await axios.delete(`${API_URL}/api/transactions/${txId}`, { headers: { Authorization: `Bearer ${token}` } });
+          alert("Transaction deleted. Loan data updated.");
+          setRefreshTrigger(t => t + 1);
+      } catch (err) {
+          alert(err.response?.data?.error || "Failed to delete transaction.");
+      }
+  };
+
+  // --- Undo Forfeiture ---
+  const handleUndoForfeit = async () => {
+      if(!window.confirm("Undo Forfeiture?\n\nThis will revert the loan status to Active/Overdue and remove the sale record.")) return;
+      try {
+          const token = localStorage.getItem('token');
+          const response = await axios.post(`${API_URL}/api/loans/${id}/undo-forfeit`, {}, { headers: { Authorization: `Bearer ${token}` } });
+          alert(response.data.message);
+          setRefreshTrigger(t => t + 1);
+      } catch (err) {
+          alert(err.response?.data?.error || "Failed to undo forfeiture.");
+      }
+  };
+
   // --- Effects ---
   useEffect(() => {
     const fetchLoanData = async () => {
@@ -180,6 +206,7 @@ function LoanPage({ userRole }) {
         case 'active': return <span className="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 rounded-pill">ACTIVE</span>;
         case 'overdue': return <span className="badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2 rounded-pill">OVERDUE</span>;
         case 'paid': return <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary px-3 py-2 rounded-pill">CLOSED</span>;
+        case 'forfeited': return <span className="badge bg-dark text-white border px-3 py-2 rounded-pill">FORFEITED</span>;
         default: return <span className="badge bg-light text-dark border px-3 py-2 rounded-pill">{status?.toUpperCase()}</span>;
     }
   };
@@ -212,75 +239,24 @@ function LoanPage({ userRole }) {
     return enriched.sort((a,b) => new Date(b.payment_date) - new Date(a.payment_date));
   }, [transactions, loanDetails]);
 
-  // FIX: EXCLUDE 'discount' from Payments In list so it doesn't look like a payment
+  // FIX: Include 'discount' in payments history list
   const paymentsReceived = transactions?.filter(tx => !['disbursement', 'discount'].includes(tx.payment_type)) || [];
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
-  
-  // Explicitly calculate Total Paid for display
   const totalPaidBack = calculatedStats ? (parseFloat(calculatedStats.principalPaid) + parseFloat(calculatedStats.interestPaid)) : 0;
 
-  // --- FIX: Process Breakdown to show Incremental instead of Cumulative ---
+  // --- FIX: Process Breakdown (Trust Backend) ---
   const processedBreakdown = useMemo(() => {
     if (!interestBreakdown || interestBreakdown.length === 0) return [];
-    if (!loanDetails) return [];
+    
+    // Sort Chronologically (Oldest First) 
+    // Backend sends Newest First, so reversing creates Oldest -> Newest
+    // We do NOT modify dates here anymore to prevent the "shifting back" bug.
+    const sorted = [...interestBreakdown].sort((a, b) => 
+        new Date(a.endDate || a.date) - new Date(b.endDate || b.date)
+    );
 
-    // 1. Sort Chronologically (Oldest First) to chain dates correctly
-    // UPDATED: Added tie-breaker to ensure Accruals come BEFORE Payments on same date
-    const sorted = [...interestBreakdown].sort((a, b) => {
-        const dateA = new Date(a.endDate || a.date);
-        const dateB = new Date(b.endDate || b.date);
-        const diff = dateA - dateB;
-        if (diff !== 0) return diff; // Sort by date first
-
-        // Tie-breaker: If dates are equal, Accruals (non-payments) come BEFORE Payments
-        const isPaymentA = a.status === 'payment';
-        const isPaymentB = b.status === 'payment';
-        
-        if (!isPaymentA && isPaymentB) return -1; // Accrual < Payment
-        if (isPaymentA && !isPaymentB) return 1;  // Payment > Accrual
-        return 0;
-    });
-
-    // Track the end date of the previous interest row
-    let lastInterestEndDate = loanDetails.pledge_date; 
-
-    const fixed = sorted.map(item => {
-        // Identify Interest Rows (assuming non-payments with interest > 0)
-        const isInterestRow = item.status !== 'payment' && parseFloat(item.interest || 0) > 0;
-
-        if (isInterestRow) {
-            const principal = parseFloat(item.amount);
-            const rate = parseFloat(loanDetails.interest_rate);
-            const interest = parseFloat(item.interest);
-
-            // A. Fix 'Months': Derive mathematically from the Interest Amount
-            // Formula: Time = Interest / (Principal * (Rate/100))
-            let correctedMonths = item.months;
-            if (principal && rate && interest) {
-                correctedMonths = interest / (principal * (rate / 100));
-            }
-
-            // B. Fix 'Start Date': Use the end date of the previous period
-            const correctedStartDate = lastInterestEndDate;
-            
-            // Update tracker: current row's end date becomes next row's start date
-            if (item.endDate) {
-                lastInterestEndDate = item.endDate;
-            }
-
-            return {
-                ...item,
-                date: correctedStartDate, // Overwrite with chained start date
-                months: correctedMonths   // Overwrite with derived months
-            };
-        }
-        
-        return item;
-    });
-
-    // Display IN ORDER (Oldest to Newest)
-    return fixed;
-  }, [interestBreakdown, loanDetails]);
+    return sorted; 
+  }, [interestBreakdown]);
 
   // --- Loading/Error States ---
   if (isLoading) return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}}></div></div>;
@@ -459,21 +435,20 @@ function LoanPage({ userRole }) {
                             <div className="small text-muted fw-bold mb-2">Principal</div>
                             <div className="d-flex justify-content-between mb-1 small"><span>Disbursed</span><span className="fw-bold">{formatCurrency(loanDetails.principal_amount)}</span></div>
                             <div className="d-flex justify-content-between mb-3 small text-success"><span>Paid Back</span><span>- {formatCurrency(calculatedStats.principalPaid)}</span></div>
+                            
                             <div className="p-2 bg-white rounded border mb-3 text-center"><small className="text-muted d-block" style={{fontSize: '0.7rem'}}>Current Principal</small><span className="fw-bold text-primary">{formatCurrency(calculatedStats.outstandingPrincipal)}</span></div>
+                            
                             <div className="small text-muted fw-bold mb-2">Interest</div>
                             <div className="d-flex justify-content-between mb-1 small"><span>Accrued</span><span className="fw-bold">{formatCurrency(calculatedStats.totalInterestOwed)}</span></div>
                             <div className="d-flex justify-content-between mb-1 small text-success"><span>Paid</span><span>- {formatCurrency(calculatedStats.interestPaid)}</span></div>
                             
-                            {/* --- UPDATED SUMMARY --- */}
                             <div className="border-top my-2"></div>
+                            {/* NEW: Explicit Total Paid and Discount display */}
                             <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Total Paid</span><span className="text-success">{formatCurrency(totalPaidBack)}</span></div>
-                            {discountGiven > 0 && (
-                                <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Discount</span><span className="text-danger">{formatCurrency(discountGiven)}</span></div>
-                            )}
-                             <div className="d-flex justify-content-between align-items-center small pt-2 border-top mt-2"><span className="fw-bold">Net Interest</span><span className="fw-bold text-danger">{formatCurrency(parseFloat(calculatedStats.amountDue) - parseFloat(calculatedStats.outstandingPrincipal))}</span></div>
+                            <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Discount</span><span className="text-danger">{formatCurrency(discountGiven)}</span></div>
                         </div>
 
-                        {/* Detailed Table (Sequential Order) */}
+                        {/* Detailed Table */}
                         <div className="col-md-8 p-3">
                             <div className="table-responsive">
                                 <table className="table table-hover small mb-0 align-middle">
@@ -521,7 +496,7 @@ function LoanPage({ userRole }) {
             </div>
             )}
 
-            {/* --- Principal & Interest Breakdown Card (Below Worksheet) --- */}
+            {/* --- Principal & Interest Breakdown Card --- */}
             {calculatedStats && (
             <div className="card border border-primary shadow-sm mb-4">
                 <div className="card-header bg-primary text-white py-2 border-bottom">
@@ -560,13 +535,21 @@ function LoanPage({ userRole }) {
             )}
             
             {/* Settlement Summary */}
-            {loanDetails.status === 'paid' && (
+            {(loanDetails.status === 'paid' || loanDetails.status === 'forfeited') && (
                 <div className="card border border-success shadow-sm mb-4">
-                    <div className="card-header bg-success text-white py-2"><i className="bi bi-check-circle-fill me-2"></i>Loan Closed</div>
+                    <div className="card-header bg-success text-white py-2 d-flex justify-content-between align-items-center">
+                        <span><i className="bi bi-check-circle-fill me-2"></i>{loanDetails.status === 'forfeited' ? 'LOAN FORFEITED' : 'LOAN CLOSED'}</span>
+                        {/* --- UNDO FORFEIT BUTTON --- */}
+                        {loanDetails.status === 'forfeited' && (
+                            <button className="btn btn-sm btn-light text-danger fw-bold" onClick={handleUndoForfeit}>
+                                <i className="bi bi-arrow-counterclockwise me-1"></i> Revert Status
+                            </button>
+                        )}
+                    </div>
                     <div className="card-body p-3">
                          <div className="row text-center small">
-                             <div className="col-4 border-end"><span className="text-muted d-block">Settled Date</span><strong className="text-dark">{formatDate(loanDetails.closed_date)}</strong></div>
-                             <div className="col-4 border-end"><span className="text-muted d-block">Total Paid</span><strong className="text-success">{formatCurrency(transactions?.filter(t => ['interest','principal','settlement'].includes(t.payment_type)).reduce((s,t)=>s+parseFloat(t.amount_paid),0))}</strong></div>
+                             <div className="col-4 border-end"><span className="text-muted d-block">Closed Date</span><strong className="text-dark">{formatDate(loanDetails.closed_date)}</strong></div>
+                             <div className="col-4 border-end"><span className="text-muted d-block">Total Paid</span><strong className="text-success">{formatCurrency(transactions?.filter(t => ['interest','principal','settlement','sale'].includes(t.payment_type)).reduce((s,t)=>s+parseFloat(t.amount_paid),0))}</strong></div>
                              <div className="col-4"><span className="text-muted d-block">Discount</span><strong className="text-danger">{formatCurrency(discountGiven)}</strong></div>
                           </div>
                     </div>
@@ -622,13 +605,17 @@ function LoanPage({ userRole }) {
                                 <div className="p-1 bg-light small fw-bold text-center text-success border-bottom" style={{fontSize: '0.7rem'}}>Payments In</div>
                                 <div className="p-2">
                                     {paymentsReceived.length > 0 ? paymentsReceived.slice(0, 8).map(tx => (
-                                        <div key={tx.id} className="mb-2 pb-1 border-bottom border-light">
+                                        <div key={tx.id} className="mb-2 pb-1 border-bottom border-light position-relative group-hover">
                                             <span className={`badge border mb-1 ${tx.payment_type === 'discount' ? 'bg-warning text-dark' : 'bg-light text-dark'}`} style={{fontSize: '0.65rem'}}>{tx.payment_type.toUpperCase()}</span>
                                             <div className={`fw-bold small ${tx.payment_type === 'discount' ? 'text-danger' : 'text-success'}`}>
                                                 {tx.payment_type === 'discount' ? '-' : ''}{formatCurrency(tx.amount_paid)}
                                             </div>
                                             <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
-                                            <div className="text-muted fst-italic" style={{fontSize: '0.6rem'}}>by: {tx.changed_by_username || 'sys'}</div>
+                                            
+                                            {/* DELETE BUTTON */}
+                                            <button className="btn btn-link p-0 position-absolute top-0 end-0 text-danger opacity-50 hover-opacity-100" style={{fontSize:'0.8rem'}} onClick={() => handleDeleteTransaction(tx.id)} title="Undo Transaction">
+                                                <i className="bi bi-trash"></i>
+                                            </button>
                                         </div>
                                     )) : <div className="text-center text-muted small py-3">No payments</div>}
                                 </div>
@@ -639,11 +626,15 @@ function LoanPage({ userRole }) {
                                 <div className="p-1 bg-light small fw-bold text-center text-primary border-bottom" style={{fontSize: '0.7rem'}}>Disbursements</div>
                                 <div className="p-2">
                                     {enrichedDisbursements.length > 0 ? enrichedDisbursements.slice(0, 8).map(tx => (
-                                        <div key={tx.id} className="mb-2 pb-1 border-bottom border-light">
+                                        <div key={tx.id} className="mb-2 pb-1 border-bottom border-light position-relative">
                                             <div className="text-muted" style={{fontSize: '0.65rem'}}>Prev: {formatCurrency(tx.prevBalance)}</div>
                                             <div className="fw-bold text-primary small">{formatCurrency(tx.amount_paid)}</div>
                                             <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
-                                            <div className="text-muted fst-italic" style={{fontSize: '0.6rem'}}>by: {tx.changed_by_username || 'sys'}</div>
+                                            
+                                            {/* DELETE BUTTON (Disbursement) */}
+                                            <button className="btn btn-link p-0 position-absolute top-0 end-0 text-danger opacity-50 hover-opacity-100" style={{fontSize:'0.8rem'}} onClick={() => handleDeleteTransaction(tx.id)} title="Undo Disbursement">
+                                                <i className="bi bi-trash"></i>
+                                            </button>
                                         </div>
                                     )) : <div className="text-center text-muted small py-3">Initial only</div>}
                                 </div>
