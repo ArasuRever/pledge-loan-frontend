@@ -8,6 +8,7 @@ import PaymentForm from '../components/PaymentForm';
 import { PrintableInvoice } from '../components/PrintableInvoice';
 import LoanHistoryModal from '../components/LoanHistoryModal';
 import RenewLoanModal from '../components/RenewLoanModal';
+import ForfeitLoanModal from '../components/ForfeitLoanModal';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -23,18 +24,16 @@ function LoanPage({ userRole }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Action States
   const [settleAmount, setSettleAmount] = useState('');
   const [settleDiscount, setSettleDiscount] = useState('');
   const [additionalAmount, setAdditionalAmount] = useState('');
   
-  // Modals & Triggers
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
+  const [showForfeitModal, setShowForfeitModal] = useState(false);
 
-  // Calculated Data
   const [calculatedStats, setCalculatedStats] = useState(null);
   const [interestBreakdown, setInterestBreakdown] = useState([]);
 
@@ -65,12 +64,10 @@ function LoanPage({ userRole }) {
     }
   };
 
-  // --- Helper: Format Currency Rounded ---
   const formatCurrency = (amount) => {
     return `₹${Math.round(parseFloat(amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
-  // --- Financial Logic ---
   const getLiveBalance = () => {
     if (calculatedStats?.amountDue) return parseFloat(calculatedStats.amountDue);
     return 0;
@@ -92,14 +89,13 @@ function LoanPage({ userRole }) {
     if (val === '') setSettleAmount(''); else setSettleAmount(Math.round(pay));
   };
 
-  // --- API Actions ---
   const handleSettleAndClose = async () => {
     const payAmount = parseFloat(settleAmount) || 0;
     const discAmount = parseFloat(settleDiscount) || 0;
     const currentBalance = getLiveBalance();
     const remaining = currentBalance - (payAmount + discAmount);
 
-    if (remaining > 1.0) { // Tolerance for rounding
+    if (remaining > 1.0) { 
       alert(`Insufficient Settlement.\n\nOutstanding: ${formatCurrency(currentBalance)}\nPayment + Discount: ${formatCurrency(payAmount + discAmount)}\nStill Due: ${formatCurrency(remaining)}`);
       return;
     }
@@ -141,7 +137,6 @@ function LoanPage({ userRole }) {
     }
   };
 
-  // --- UNDO / DELETE Transaction Handler ---
   const handleDeleteTransaction = async (txId) => {
       if(!window.confirm("Are you sure you want to delete this transaction?\n\nThis action cannot be undone.")) return;
       try {
@@ -154,20 +149,18 @@ function LoanPage({ userRole }) {
       }
   };
 
-  // --- UNDO Forfeiture Handler ---
   const handleUndoForfeit = async () => {
       if(!window.confirm("Undo Forfeiture?\n\nThis will revert the loan status to Active/Overdue and remove the sale record.")) return;
       try {
           const token = localStorage.getItem('token');
-          const response = await axios.post(`${API_URL}/api/loans/${id}/undo-forfeit`, {}, { headers: { Authorization: `Bearer ${token}` } });
-          alert(response.data.message);
+          await axios.post(`${API_URL}/api/loans/${id}/undo-forfeit`, {}, { headers: { Authorization: `Bearer ${token}` } });
+          alert("Forfeiture undone. Loan status reverted.");
           setRefreshTrigger(t => t + 1);
       } catch (err) {
           alert(err.response?.data?.error || "Failed to undo forfeiture.");
       }
   };
 
-  // --- Effects ---
   useEffect(() => {
     const fetchLoanData = async () => {
       setIsLoading(true);
@@ -184,12 +177,16 @@ function LoanPage({ userRole }) {
     fetchLoanData();
   }, [id, refreshTrigger]);
 
-  // --- Data Extraction & Helpers ---
   const { loanDetails, transactions } = loanData || {};
   
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
+        if (dateString.length === 10 && !dateString.includes('T')) {
+            const parts = dateString.split('-');
+            const d = new Date(parts[0], parts[1]-1, parts[2]);
+            return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
         const d = new Date(dateString);
         if (isNaN(d.getTime())) return 'Invalid Date';
         return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -215,7 +212,6 @@ function LoanPage({ userRole }) {
     }
   };
 
-  // --- Previous Balance Calculation ---
   const enrichedDisbursements = useMemo(() => {
     if (!transactions) return [];
     
@@ -224,7 +220,10 @@ function LoanPage({ userRole }) {
     
     const disbs = transactions.filter(t => t.payment_type === 'disbursement');
     const topUpTotal = disbs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
-    const initialPrincipal = (parseFloat(loanDetails?.principal_amount || 0) - topUpTotal);
+    
+    // FIX: Calculate Initial Principal correctly (Current + Paid - Topups)
+    const principalPaidSum = transactions.filter(t => t.payment_type === 'principal').reduce((s,t)=>s+parseFloat(t.amount_paid),0);
+    const initialPrincipal = parseFloat(loanDetails?.principal_amount || 0) + principalPaidSum - topUpTotal;
     
     runningPrincipal = initialPrincipal; 
 
@@ -242,17 +241,13 @@ function LoanPage({ userRole }) {
     return enriched.sort((a,b) => new Date(b.payment_date) - new Date(a.payment_date));
   }, [transactions, loanDetails]);
 
-  // Transaction Summaries
   const paymentsReceived = transactions?.filter(tx => !['disbursement', 'discount'].includes(tx.payment_type)) || [];
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
   const totalPaidBack = calculatedStats ? (parseFloat(calculatedStats.principalPaid) + parseFloat(calculatedStats.interestPaid)) : 0;
 
-  // --- Breakdown Sort Logic (Oldest -> Newest) ---
   const processedBreakdown = useMemo(() => {
     if (!interestBreakdown || interestBreakdown.length === 0) return [];
     
-    // 1. Sort by Start Date (Oldest First)
-    // 2. Tie-Breaker: Disbursement (0) -> Accrual (1) -> Payment (2)
     const sorted = [...interestBreakdown].sort((a, b) => {
         const dateA = new Date(a.date);
         const dateB = new Date(b.date);
@@ -261,9 +256,9 @@ function LoanPage({ userRole }) {
         if (diff !== 0) return diff; 
 
         const getPriority = (status) => {
-            if (status === 'disbursement') return 0; // Money Out (First)
-            if (status === 'accrued') return 1;      // Interest Accrues
-            return 2;                                // Money In (Last)
+            if (status === 'disbursement') return 0; 
+            if (status === 'accrued') return 1;      
+            return 2;                                
         };
 
         return getPriority(a.status) - getPriority(b.status);
@@ -278,8 +273,7 @@ function LoanPage({ userRole }) {
 
   return (
     <div className="container-fluid bg-light min-vh-100 py-4 px-lg-5">
-      
-      {/* --- HEADER --- */}
+      {/* Header */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
         <div>
             <nav aria-label="breadcrumb">
@@ -302,6 +296,13 @@ function LoanPage({ userRole }) {
             <button className="btn btn-white bg-white border border-secondary-subtle shadow-sm text-primary" onClick={() => setShowPrintModal(true)}>
                 <i className="bi bi-printer me-1"></i> Invoice
             </button>
+            
+            {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
+                <button className="btn btn-danger text-white shadow-sm" onClick={() => setShowForfeitModal(true)}>
+                    <i className="bi bi-shop me-1"></i> Sell / Forfeit
+                </button>
+            )}
+
             {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                 <button className="btn btn-success text-white shadow-sm" onClick={() => setShowRenewModal(true)}>
                     <i className="bi bi-arrow-repeat me-1"></i> Renew
@@ -318,7 +319,7 @@ function LoanPage({ userRole }) {
         </div>
       </div>
 
-      {/* --- KEY METRICS --- */}
+      {/* Metric Cards */}
       <div className="row g-2 mb-4">
         <div className="col">
             <div className="card border border-secondary-subtle shadow-sm h-100">
@@ -365,9 +366,8 @@ function LoanPage({ userRole }) {
       </div>
 
       <div className="row g-4">
-        {/* --- LEFT COLUMN --- */}
+        {/* Left Column */}
         <div className="col-lg-8">
-            
             {/* Customer Details */}
             <div className="card border border-secondary-subtle shadow-sm mb-3">
                 <div className="card-header bg-white py-2 border-bottom">
@@ -456,7 +456,6 @@ function LoanPage({ userRole }) {
                             <div className="d-flex justify-content-between mb-1 small text-success"><span>Paid</span><span>- {formatCurrency(calculatedStats.interestPaid)}</span></div>
                             
                             <div className="border-top my-2"></div>
-                            {/* NEW: Explicit Total Paid and Discount display */}
                             <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Total Paid</span><span className="text-success">{formatCurrency(totalPaidBack)}</span></div>
                             <div className="d-flex justify-content-between mb-1 small text-dark fw-bold"><span>Discount</span><span className="text-danger">{formatCurrency(discountGiven)}</span></div>
                         </div>
@@ -478,7 +477,6 @@ function LoanPage({ userRole }) {
                                             const isPayment = item.status === 'payment';
                                             const isDisbursement = item.status === 'disbursement';
                                             
-                                            // Conditional Formatting
                                             let rowClass = '';
                                             if (isPayment) rowClass = 'table-success bg-opacity-10';
                                             if (isDisbursement) rowClass = 'table-primary bg-opacity-10';
@@ -516,7 +514,7 @@ function LoanPage({ userRole }) {
             </div>
             )}
 
-            {/* --- Principal & Interest Breakdown Card --- */}
+            {/* Principal & Interest Breakdown Card */}
             {calculatedStats && (
             <div className="card border border-primary shadow-sm mb-4">
                 <div className="card-header bg-primary text-white py-2 border-bottom">
@@ -554,12 +552,15 @@ function LoanPage({ userRole }) {
             </div>
             )}
             
-            {/* Settlement Summary (FORFEITED / PAID) */}
+            {/* UPDATED: FORFEITED / SETTLED STATUS CARD */}
             {(loanDetails.status === 'paid' || loanDetails.status === 'forfeited') && (
                 <div className="card border border-success shadow-sm mb-4">
                     <div className="card-header bg-success text-white py-2 d-flex justify-content-between align-items-center">
-                        <span><i className="bi bi-check-circle-fill me-2"></i>{loanDetails.status === 'forfeited' ? 'LOAN FORFEITED' : 'LOAN CLOSED'}</span>
-                        {/* --- UNDO FORFEIT BUTTON --- */}
+                        <span>
+                            <i className="bi bi-check-circle-fill me-2"></i>
+                            {loanDetails.status === 'forfeited' ? 'LOAN FORFEITED / SOLD' : 'LOAN CLOSED'}
+                        </span>
+                        {/* UNDO FORFEIT BUTTON */}
                         {loanDetails.status === 'forfeited' && (
                             <button className="btn btn-sm btn-light text-danger fw-bold" onClick={handleUndoForfeit}>
                                 <i className="bi bi-arrow-counterclockwise me-1"></i> Revert Status
@@ -567,11 +568,44 @@ function LoanPage({ userRole }) {
                         )}
                     </div>
                     <div className="card-body p-3">
-                         <div className="row text-center small">
-                             <div className="col-4 border-end"><span className="text-muted d-block">Closed Date</span><strong className="text-dark">{formatDate(loanDetails.closed_date)}</strong></div>
-                             <div className="col-4 border-end"><span className="text-muted d-block">Total Paid</span><strong className="text-success">{formatCurrency(transactions?.filter(t => ['interest','principal','settlement','sale'].includes(t.payment_type)).reduce((s,t)=>s+parseFloat(t.amount_paid),0))}</strong></div>
-                             <div className="col-4"><span className="text-muted d-block">Discount</span><strong className="text-danger">{formatCurrency(discountGiven)}</strong></div>
-                          </div>
+                         {loanDetails.status === 'forfeited' ? (
+                             <div className="row text-center">
+                                 <div className="col-md-3 border-end">
+                                     <small className="text-muted d-block">Outstanding Principal</small>
+                                     <strong className="text-dark fs-5">{formatCurrency(loanDetails.principal_amount)}</strong>
+                                 </div>
+                                 <div className="col-md-3 border-end">
+                                     <small className="text-muted d-block">Accrued Interest</small>
+                                     <strong className="text-dark fs-5">{formatCurrency(calculatedStats?.totalInterestOwed)}</strong>
+                                 </div>
+                                 <div className="col-md-3 border-end">
+                                     <small className="text-muted d-block text-uppercase fw-bold text-danger">Sold For</small>
+                                     <strong className="text-danger fs-4">{formatCurrency(loanDetails.sale_price)}</strong>
+                                 </div>
+                                 <div className="col-md-3">
+                                     {(() => {
+                                         const p = parseFloat(loanDetails.principal_amount || 0);
+                                         const i = parseFloat(calculatedStats?.totalInterestOwed || 0);
+                                         const s = parseFloat(loanDetails.sale_price || 0);
+                                         const diff = s - (p + i);
+                                         return (
+                                             <>
+                                                <small className="text-muted d-block">Result</small>
+                                                <strong className={diff >= 0 ? "text-success" : "text-danger"}>
+                                                    {diff >= 0 ? "Surplus: " : "Deficit: "}{formatCurrency(Math.abs(diff))}
+                                                </strong>
+                                             </>
+                                         );
+                                     })()}
+                                 </div>
+                             </div>
+                         ) : (
+                             <div className="row text-center small">
+                                 <div className="col-4 border-end"><span className="text-muted d-block">Closed Date</span><strong className="text-dark">{formatDate(loanDetails.closed_date)}</strong></div>
+                                 <div className="col-4 border-end"><span className="text-muted d-block">Total Paid</span><strong className="text-success">{formatCurrency(transactions?.filter(t => ['interest','principal','settlement','sale'].includes(t.payment_type)).reduce((s,t)=>s+parseFloat(t.amount_paid),0))}</strong></div>
+                                 <div className="col-4"><span className="text-muted d-block">Discount</span><strong className="text-danger">{formatCurrency(discountGiven)}</strong></div>
+                              </div>
+                         )}
                     </div>
                 </div>
             )}
@@ -695,6 +729,17 @@ function LoanPage({ userRole }) {
           currentPrincipal={calculatedStats ? parseFloat(calculatedStats.outstandingPrincipal) : 0}
           onClose={() => setShowRenewModal(false)}
           onRenewalSuccess={(newLoanId) => { setShowRenewModal(false); navigate(`/loans/${newLoanId}`); }}
+        />
+      )}
+
+      {showForfeitModal && (
+        <ForfeitLoanModal 
+          loan={loanDetails} 
+          // PASS THE FULL STATS OBJECT
+          stats={calculatedStats}
+          userRole={userRole}
+          onClose={() => setShowForfeitModal(false)} 
+          onSuccess={() => { setShowForfeitModal(false); setRefreshTrigger(t => t+1); }} 
         />
       )}
 
