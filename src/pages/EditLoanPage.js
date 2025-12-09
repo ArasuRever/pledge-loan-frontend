@@ -46,9 +46,11 @@ const EditLoanPage = () => {
   const [saving, setSaving] = useState(false);
 
   // --- Helpers ---
-  const formatDateForInput = (isoString) => {
-    if (!isoString) return '';
-    return isoString.split('T')[0]; // Safe split
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    if (dateString.length === 10 && !dateString.includes('T')) return dateString;
+    const d = new Date(dateString);
+    return d.toLocaleDateString('en-CA'); 
   };
 
   const formatDisplayDate = (isoString) => {
@@ -57,7 +59,7 @@ const EditLoanPage = () => {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  const formatCurrency = (amount) => `₹${Math.round(parseFloat(amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
   const stopCameraStream = () => {
     if (streamRef.current) { 
@@ -78,7 +80,8 @@ const EditLoanPage = () => {
 
     const fetchLoan = async () => {
       try {
-        const response = await axios.get(`${API_URL}/api/loans/${id}`);
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`${API_URL}/api/loans/${id}`, { headers: { Authorization: `Bearer ${token}` } });
         const data = response.data.loanDetails;
         const txs = response.data.transactions || [];
         
@@ -145,7 +148,7 @@ const EditLoanPage = () => {
           }, { headers: { Authorization: `Bearer ${token}` } });
           
           alert("Transaction added.");
-          const refresh = await axios.get(`${API_URL}/api/loans/${id}`);
+          const refresh = await axios.get(`${API_URL}/api/loans/${id}`, { headers: { Authorization: `Bearer ${token}` } });
           setTransactions(refresh.data.transactions);
           setNewTx({ date: '', type: 'interest', amount: '' });
       } catch (err) {
@@ -155,7 +158,6 @@ const EditLoanPage = () => {
       }
   };
 
-  // --- UNDO / DELETE Transaction Handler ---
   const handleDeleteTransaction = async (txId) => {
       if(!window.confirm("Undo this transaction? It will be removed permanently.")) return;
       try {
@@ -163,8 +165,7 @@ const EditLoanPage = () => {
           await axios.delete(`${API_URL}/api/transactions/${txId}`, { headers: { Authorization: `Bearer ${token}` } });
           alert("Transaction undone.");
           
-          // Refresh list
-          const refresh = await axios.get(`${API_URL}/api/loans/${id}`);
+          const refresh = await axios.get(`${API_URL}/api/loans/${id}`, { headers: { Authorization: `Bearer ${token}` } });
           setTransactions(refresh.data.transactions);
       } catch (err) {
           alert(err.response?.data?.error || "Failed to delete transaction.");
@@ -276,7 +277,6 @@ const EditLoanPage = () => {
         </div>
 
         <form onSubmit={handleSubmit}>
-            {/* ROW 1: Main Info & Actions */}
             <div className="row g-4 mb-4">
                 
                 {/* Left Column: Loan Data */}
@@ -316,7 +316,96 @@ const EditLoanPage = () => {
                         </div>
                     </div>
 
-                    {/* 2. Item Details Card */}
+                    {/* 2. Manual Transaction Log (MOVED HERE) */}
+                    <div className="card shadow-sm border-0 rounded-4 mb-4">
+                        <div className="card-header bg-secondary bg-opacity-10 border-bottom-0 pt-3 px-3 d-flex justify-content-between align-items-center">
+                            <h6 className="fw-bold mb-0 small text-uppercase text-secondary"><i className="bi bi-clock-history me-2"></i>Manual Transaction Log</h6>
+                            <span className="badge bg-white text-dark border">Backdating Enabled</span>
+                        </div>
+                        <div className="card-body p-4">
+                            {/* Manual Entry Form */}
+                            <div className="bg-light p-3 rounded-3 border mb-4">
+                                <label className="small fw-bold text-muted mb-2 d-block">Log Past/Missing Payment</label>
+                                <div className="row g-2 align-items-end">
+                                    <div className="col-md-3">
+                                        <label className="small text-muted" style={{fontSize: '0.75rem'}}>Date</label>
+                                        <input type="date" className="form-control form-control-sm" value={newTx.date} onChange={e => setNewTx({...newTx, date: e.target.value})} />
+                                    </div>
+                                    <div className="col-md-3">
+                                        <label className="small text-muted" style={{fontSize: '0.75rem'}}>Type</label>
+                                        <select className="form-select form-select-sm" value={newTx.type} onChange={e => setNewTx({...newTx, type: e.target.value})}>
+                                            <option value="interest">Interest Payment</option>
+                                            <option value="principal">Principal Repayment</option>
+                                            <option value="disbursement">Disbursement (Top-up)</option>
+                                            <option value="settlement">Settlement</option>
+                                        </select>
+                                    </div>
+                                    <div className="col-md-4">
+                                        <label className="small text-muted" style={{fontSize: '0.75rem'}}>Amount</label>
+                                        <input type="number" className="form-control form-control-sm" placeholder="₹ Amount" value={newTx.amount} onChange={e => setNewTx({...newTx, amount: e.target.value})} />
+                                    </div>
+                                    <div className="col-md-2">
+                                        <button type="button" className="btn btn-success btn-sm w-100 fw-bold" onClick={handleAddTransaction} disabled={addingTx}>
+                                            {addingTx ? '...' : 'ADD'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* List */}
+                            <div className="table-responsive">
+                                <table className="table table-hover align-middle mb-0">
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th scope="col" className="small text-muted">Date</th>
+                                            <th scope="col" className="small text-muted">Type</th>
+                                            <th scope="col" className="small text-muted text-end">Amount</th>
+                                            <th scope="col" className="small text-muted text-end">User</th>
+                                            <th scope="col" className="small text-muted text-center" style={{width:'80px'}}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {transactions.length > 0 ? (
+                                            transactions.map((tx) => {
+                                                let badgeClass = "badge bg-light text-secondary border fw-normal";
+                                                let amtClass = "fw-bold text-success";
+                                                
+                                                if (tx.payment_type === 'disbursement') {
+                                                     badgeClass = "badge bg-primary bg-opacity-10 text-primary border border-primary-subtle fw-normal";
+                                                     amtClass = "fw-bold text-primary";
+                                                } else if (tx.payment_type === 'discount') {
+                                                     badgeClass = "badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle fw-normal";
+                                                     amtClass = "fw-bold text-danger";
+                                                }
+
+                                                return (
+                                                    <tr key={tx.id}>
+                                                        <td className="fw-medium">{formatDisplayDate(tx.payment_date)}</td>
+                                                        <td><span className={badgeClass} style={{fontSize: '0.7rem'}}>{tx.payment_type.toUpperCase()}</span></td>
+                                                        <td className={`text-end ${amtClass}`}>{formatCurrency(tx.amount_paid)}</td>
+                                                        <td className="text-end text-muted small fst-italic">{tx.changed_by_username || 'sys'}</td>
+                                                        <td className="text-center">
+                                                            <button 
+                                                                className="btn btn-sm text-danger fw-bold" 
+                                                                style={{fontSize: '0.75rem'}}
+                                                                onClick={() => handleDeleteTransaction(tx.id)}
+                                                            >
+                                                                Undo
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        ) : (
+                                            <tr><td colSpan="5" className="text-center text-muted py-4 small">No transactions found.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. Item Details Card */}
                     <div className="card shadow-sm border-0 rounded-4">
                         <div className="card-header bg-white border-bottom-0 pt-4 px-4 pb-0">
                             <h5 className="fw-bold text-success"><i className="bi bi-box-seam me-2"></i>Item Details</h5>
@@ -342,8 +431,6 @@ const EditLoanPage = () => {
                                         <label htmlFor="desc">Description</label>
                                     </div>
                                 </div>
-                                
-                                {/* Weights Row */}
                                 <div className="col-12">
                                     <div className="p-3 bg-light rounded-3 border">
                                         <div className="row g-2">
@@ -362,7 +449,6 @@ const EditLoanPage = () => {
                                         </div>
                                     </div>
                                 </div>
-
                                 <div className="col-md-6">
                                     <div className="form-floating">
                                         <input type="number" className="form-control" id="appValue" name="appraised_value" value={formData.appraised_value} onChange={handleChange} />
@@ -430,100 +516,6 @@ const EditLoanPage = () => {
                         </div>
                     </div>
 
-                </div>
-            </div>
-
-            {/* ROW 2: Transaction History (Full Width) */}
-            <div className="row">
-                <div className="col-12">
-                    <div className="card shadow-sm border-0 rounded-4">
-                        <div className="card-header bg-secondary bg-opacity-10 border-bottom-0 pt-3 px-3 d-flex justify-content-between align-items-center">
-                            <h6 className="fw-bold mb-0 small text-uppercase text-secondary"><i className="bi bi-clock-history me-2"></i>Manual Transaction Log</h6>
-                            <span className="badge bg-white text-dark border">Backdating Enabled</span>
-                        </div>
-                        <div className="card-body p-4">
-                            {/* Manual Entry Form */}
-                            <div className="bg-light p-3 rounded-3 border mb-4">
-                                <label className="small fw-bold text-muted mb-2 d-block">Log Past/Missing Payment</label>
-                                <div className="row g-2 align-items-end">
-                                    <div className="col-md-3">
-                                        <label className="small text-muted" style={{fontSize: '0.75rem'}}>Date</label>
-                                        <input type="date" className="form-control form-control-sm" value={newTx.date} onChange={e => setNewTx({...newTx, date: e.target.value})} />
-                                    </div>
-                                    <div className="col-md-3">
-                                        <label className="small text-muted" style={{fontSize: '0.75rem'}}>Type</label>
-                                        <select className="form-select form-select-sm" value={newTx.type} onChange={e => setNewTx({...newTx, type: e.target.value})}>
-                                            <option value="interest">Interest Payment</option>
-                                            <option value="principal">Principal Repayment</option>
-                                            <option value="disbursement">Disbursement (Top-up)</option>
-                                            <option value="settlement">Settlement</option>
-                                        </select>
-                                    </div>
-                                    <div className="col-md-4">
-                                        <label className="small text-muted" style={{fontSize: '0.75rem'}}>Amount</label>
-                                        <input type="number" className="form-control form-control-sm" placeholder="₹ Amount" value={newTx.amount} onChange={e => setNewTx({...newTx, amount: e.target.value})} />
-                                    </div>
-                                    <div className="col-md-2">
-                                        <button type="button" className="btn btn-success btn-sm w-100 fw-bold" onClick={handleAddTransaction} disabled={addingTx}>
-                                            {addingTx ? '...' : 'ADD'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* List */}
-                            <div className="table-responsive">
-                                <table className="table table-hover align-middle mb-0">
-                                    <thead className="table-light">
-                                        <tr>
-                                            <th scope="col" className="small text-muted">Date</th>
-                                            <th scope="col" className="small text-muted">Type</th>
-                                            <th scope="col" className="small text-muted text-end">Amount</th>
-                                            <th scope="col" className="small text-muted text-end">User</th>
-                                            <th scope="col" className="small text-muted text-center" style={{width:'80px'}}>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {transactions.length > 0 ? (
-                                            transactions.map((tx) => {
-                                                let badgeClass = "badge bg-light text-secondary border fw-normal";
-                                                let amtClass = "fw-bold text-success";
-                                                
-                                                if (tx.payment_type === 'disbursement') {
-                                                     badgeClass = "badge bg-primary bg-opacity-10 text-primary border border-primary-subtle fw-normal";
-                                                     amtClass = "fw-bold text-primary";
-                                                } else if (tx.payment_type === 'discount') {
-                                                     badgeClass = "badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle fw-normal";
-                                                     amtClass = "fw-bold text-danger";
-                                                }
-
-                                                return (
-                                                    <tr key={tx.id}>
-                                                        <td className="fw-medium">{formatDisplayDate(tx.payment_date)}</td>
-                                                        <td><span className={badgeClass} style={{fontSize: '0.7rem'}}>{tx.payment_type.toUpperCase()}</span></td>
-                                                        <td className={`text-end ${amtClass}`}>{formatCurrency(tx.amount_paid)}</td>
-                                                        <td className="text-end text-muted small fst-italic">{tx.changed_by_username || 'sys'}</td>
-                                                        {/* --- DELETE BUTTON IS HERE --- */}
-                                                        <td className="text-center">
-                                                            <button 
-                                                                className="btn btn-sm text-danger fw-bold" 
-                                                                style={{fontSize: '0.75rem'}}
-                                                                onClick={() => handleDeleteTransaction(tx.id)}
-                                                            >
-                                                                Undo
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })
-                                        ) : (
-                                            <tr><td colSpan="5" className="text-center text-muted py-4 small">No transactions found.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </form>

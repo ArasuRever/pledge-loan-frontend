@@ -65,6 +65,11 @@ function LoanPage({ userRole }) {
     }
   };
 
+  // --- Helper: Format Currency Rounded ---
+  const formatCurrency = (amount) => {
+    return `₹${Math.round(parseFloat(amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  };
+
   // --- Financial Logic ---
   const getLiveBalance = () => {
     if (calculatedStats?.amountDue) return parseFloat(calculatedStats.amountDue);
@@ -76,7 +81,7 @@ function LoanPage({ userRole }) {
     const balance = getLiveBalance();
     const pay = parseFloat(val) || 0;
     const disc = Math.max(0, balance - pay);
-    if (val === '') setSettleDiscount(''); else setSettleDiscount(disc.toFixed(2));
+    if (val === '') setSettleDiscount(''); else setSettleDiscount(Math.round(disc));
   };
 
   const handleDiscountInput = (val) => {
@@ -84,7 +89,7 @@ function LoanPage({ userRole }) {
     const balance = getLiveBalance();
     const disc = parseFloat(val) || 0;
     const pay = Math.max(0, balance - disc);
-    if (val === '') setSettleAmount(''); else setSettleAmount(pay.toFixed(2));
+    if (val === '') setSettleAmount(''); else setSettleAmount(Math.round(pay));
   };
 
   // --- API Actions ---
@@ -94,7 +99,7 @@ function LoanPage({ userRole }) {
     const currentBalance = getLiveBalance();
     const remaining = currentBalance - (payAmount + discAmount);
 
-    if (remaining > 0.5) {
+    if (remaining > 1.0) { // Tolerance for rounding
       alert(`Insufficient Settlement.\n\nOutstanding: ${formatCurrency(currentBalance)}\nPayment + Discount: ${formatCurrency(payAmount + discAmount)}\nStill Due: ${formatCurrency(remaining)}`);
       return;
     }
@@ -102,8 +107,8 @@ function LoanPage({ userRole }) {
     if (window.confirm(`Confirm Settlement?\n\nCash Payment: ${formatCurrency(payAmount)}\nDiscount: ${formatCurrency(discAmount)}\n\nThis will CLOSE the loan.`)) {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.post(`${API_URL}/api/loans/${id}/settle`, { settlementAmount: payAmount, discountAmount: discAmount }, { headers: { Authorization: `Bearer ${token}` } });
-        alert(response.data.message);
+        await axios.post(`${API_URL}/api/loans/${id}/settle`, { settlementAmount: payAmount, discountAmount: discAmount }, { headers: { Authorization: `Bearer ${token}` } });
+        alert("Loan Settled Successfully.");
         setSettleAmount('');
         setSettleDiscount('');
         setRefreshTrigger(t => t + 1);
@@ -114,11 +119,11 @@ function LoanPage({ userRole }) {
   const handleAddPrincipal = async () => {
     const amountValue = parseFloat(additionalAmount);
     if (!amountValue || amountValue <= 0) return alert('Please enter a valid positive amount.');
-    if (window.confirm(`Add ₹${amountValue.toFixed(2)} to principal?`)) {
+    if (window.confirm(`Add ${formatCurrency(amountValue)} to principal?`)) {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.post(`${API_URL}/api/loans/${id}/add-principal`, { additionalAmount: amountValue }, { headers: { Authorization: `Bearer ${token}` } });
-        alert(response.data.message);
+        await axios.post(`${API_URL}/api/loans/${id}/add-principal`, { additionalAmount: amountValue }, { headers: { Authorization: `Bearer ${token}` } });
+        alert("Principal added.");
         setAdditionalAmount('');
         setRefreshTrigger(t => t + 1);
       } catch (err) { alert(err.response?.data?.error || 'Add principal failed.'); }
@@ -136,7 +141,7 @@ function LoanPage({ userRole }) {
     }
   };
 
-  // --- Undo / Delete Transaction ---
+  // --- UNDO / DELETE Transaction Handler ---
   const handleDeleteTransaction = async (txId) => {
       if(!window.confirm("Are you sure you want to delete this transaction?\n\nThis action cannot be undone.")) return;
       try {
@@ -149,7 +154,7 @@ function LoanPage({ userRole }) {
       }
   };
 
-  // --- Undo Forfeiture ---
+  // --- UNDO Forfeiture Handler ---
   const handleUndoForfeit = async () => {
       if(!window.confirm("Undo Forfeiture?\n\nThis will revert the loan status to Active/Overdue and remove the sale record.")) return;
       try {
@@ -181,7 +186,6 @@ function LoanPage({ userRole }) {
 
   // --- Data Extraction & Helpers ---
   const { loanDetails, transactions } = loanData || {};
-  const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -211,14 +215,13 @@ function LoanPage({ userRole }) {
     }
   };
 
-  // --- Logic: Previous Balance for Disbursements ---
+  // --- Previous Balance Calculation ---
   const enrichedDisbursements = useMemo(() => {
     if (!transactions) return [];
     
     const chronoTxs = [...transactions].sort((a,b) => new Date(a.payment_date) - new Date(b.payment_date));
     let runningPrincipal = 0;
     
-    // Attempt to infer base principal start point
     const disbs = transactions.filter(t => t.payment_type === 'disbursement');
     const topUpTotal = disbs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
     const initialPrincipal = (parseFloat(loanDetails?.principal_amount || 0) - topUpTotal);
@@ -239,26 +242,36 @@ function LoanPage({ userRole }) {
     return enriched.sort((a,b) => new Date(b.payment_date) - new Date(a.payment_date));
   }, [transactions, loanDetails]);
 
-  // FIX: Include 'discount' in payments history list
+  // Transaction Summaries
   const paymentsReceived = transactions?.filter(tx => !['disbursement', 'discount'].includes(tx.payment_type)) || [];
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
   const totalPaidBack = calculatedStats ? (parseFloat(calculatedStats.principalPaid) + parseFloat(calculatedStats.interestPaid)) : 0;
 
-  // --- FIX: Process Breakdown (Trust Backend) ---
+  // --- Breakdown Sort Logic (Oldest -> Newest) ---
   const processedBreakdown = useMemo(() => {
     if (!interestBreakdown || interestBreakdown.length === 0) return [];
     
-    // Sort Chronologically (Oldest First) 
-    // Backend sends Newest First, so reversing creates Oldest -> Newest
-    // We do NOT modify dates here anymore to prevent the "shifting back" bug.
-    const sorted = [...interestBreakdown].sort((a, b) => 
-        new Date(a.endDate || a.date) - new Date(b.endDate || b.date)
-    );
+    // 1. Sort by Start Date (Oldest First)
+    // 2. Tie-Breaker: Disbursement (0) -> Accrual (1) -> Payment (2)
+    const sorted = [...interestBreakdown].sort((a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        
+        const diff = dateA - dateB;
+        if (diff !== 0) return diff; 
+
+        const getPriority = (status) => {
+            if (status === 'disbursement') return 0; // Money Out (First)
+            if (status === 'accrued') return 1;      // Interest Accrues
+            return 2;                                // Money In (Last)
+        };
+
+        return getPriority(a.status) - getPriority(b.status);
+    });
 
     return sorted; 
   }, [interestBreakdown]);
 
-  // --- Loading/Error States ---
   if (isLoading) return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}}></div></div>;
   if (error) return <div className="alert alert-danger m-5 text-center shadow-sm">{error}</div>;
   if (!loanData?.loanDetails) return <div className="alert alert-warning m-5">Loan data missing.</div>;
@@ -463,20 +476,27 @@ function LoanPage({ userRole }) {
                                     <tbody>
                                         {processedBreakdown.map((item, idx) => {
                                             const isPayment = item.status === 'payment';
+                                            const isDisbursement = item.status === 'disbursement';
+                                            
+                                            // Conditional Formatting
+                                            let rowClass = '';
+                                            if (isPayment) rowClass = 'table-success bg-opacity-10';
+                                            if (isDisbursement) rowClass = 'table-primary bg-opacity-10';
+
                                             return (
-                                                <tr key={idx} className={isPayment ? 'table-success bg-opacity-10' : ''}>
+                                                <tr key={idx} className={rowClass}>
                                                     <td>
-                                                        <div className={`fw-bold ${isPayment ? 'text-success' : ''}`} style={{fontSize: '0.75rem'}}>{item.label}</div>
+                                                        <div className={`fw-bold ${isPayment ? 'text-success' : (isDisbursement ? 'text-primary' : '')}`} style={{fontSize: '0.75rem'}}>{item.label}</div>
                                                         <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDate(item.date)} {item.endDate ? `- ${formatDate(item.endDate)}` : ''}</div>
                                                     </td>
-                                                    <td className={`text-end ${isPayment ? 'text-muted' : ''}`}>
-                                                        {isPayment ? '-' : formatCurrency(item.amount)}
+                                                    <td className={`text-end ${isPayment || isDisbursement ? 'text-muted' : ''}`}>
+                                                        {isPayment || isDisbursement ? '-' : formatCurrency(item.amount)}
                                                     </td>
                                                     <td className="text-end">
                                                         {item.months ? parseFloat(item.months).toFixed(2) : '-'}
                                                     </td>
-                                                    <td className={`text-end fw-bold ${isPayment ? 'text-success' : ''}`}>
-                                                        {isPayment ? formatCurrency(item.amount) : formatCurrency(item.interest)}
+                                                    <td className={`text-end fw-bold ${isPayment ? 'text-success' : (isDisbursement ? 'text-primary' : '')}`}>
+                                                        {isPayment ? formatCurrency(item.amount) : (isDisbursement ? formatCurrency(item.amount) : formatCurrency(item.interest))}
                                                     </td>
                                                 </tr>
                                             );
@@ -534,7 +554,7 @@ function LoanPage({ userRole }) {
             </div>
             )}
             
-            {/* Settlement Summary */}
+            {/* Settlement Summary (FORFEITED / PAID) */}
             {(loanDetails.status === 'paid' || loanDetails.status === 'forfeited') && (
                 <div className="card border border-success shadow-sm mb-4">
                     <div className="card-header bg-success text-white py-2 d-flex justify-content-between align-items-center">
@@ -595,7 +615,7 @@ function LoanPage({ userRole }) {
                 </>
                 )}
 
-                {/* B. Transaction History (Improved to Show Discount) */}
+                {/* B. Transaction History (Improved with DELETE Icon) */}
                 <div className="card border border-secondary-subtle shadow-sm">
                     <div className="card-header bg-white fw-bold py-2 border-bottom small">Transaction History</div>
                     <div className="card-body p-0">

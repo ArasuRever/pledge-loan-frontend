@@ -1,4 +1,3 @@
-// src/pages/OverdueLoansPage.js
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -11,31 +10,21 @@ const OverdueLoansPage = () => {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // State for the modal
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
 
   useEffect(() => {
     const fetchOverdueLoans = async () => {
       try {
-        // 1. Get the token
         const token = localStorage.getItem('token');
-        
-        // 2. Add Cache Buster
         const cacheBuster = Date.now();
         const url = `${API_URL}/api/loans/overdue?t=${cacheBuster}`;
-        
-        // 3. Send Request with Headers
         const response = await axios.get(url, {
-            headers: {
-                Authorization: `Bearer ${token}` // <--- FIXED: Added Auth Header
-            }
+            headers: { Authorization: `Bearer ${token}` }
         });
-        
         setLoans(response.data);
       } catch (err) {
         console.error("Error fetching overdue loans:", err);
-        // Optional: Redirect to login if unauthorized
         if (err.response && (err.response.status === 401 || err.response.status === 403)) {
             navigate('/login');
         }
@@ -89,25 +78,15 @@ const OverdueLoansPage = () => {
                   loans.map(loan => {
                     const days = getDaysOverdue(loan.due_date);
                     return (
-                        <tr 
-                            key={loan.id} 
-                            style={{cursor: 'pointer'}} 
-                            onClick={() => navigate(`/loans/${loan.id}`)}
-                        >
+                        <tr key={loan.id} style={{cursor: 'pointer'}} onClick={() => navigate(`/loans/${loan.id}`)}>
                             <td className="fw-bold text-primary">{loan.book_loan_number}</td>
                             <td>{loan.customer_name}</td>
-                            <td className="fw-bold">₹{parseFloat(loan.principal_amount).toFixed(2)}</td>
+                            {/* FIX: Rounded Principal */}
+                            <td className="fw-bold">₹{Math.round(parseFloat(loan.principal_amount))}</td>
                             <td className="text-danger fw-medium">{new Date(loan.due_date).toLocaleDateString('en-IN')}</td>
-                            <td>
-                                <span className={`badge ${days > 90 ? 'bg-danger' : 'bg-warning text-dark'}`}>
-                                    {days} Days
-                                </span>
-                            </td>
+                            <td><span className={`badge ${days > 90 ? 'bg-danger' : 'bg-warning text-dark'}`}>{days} Days</span></td>
                             <td className="text-end pe-4">
-                                <button 
-                                    className="btn btn-sm btn-dark" 
-                                    onClick={(e) => handleNoticeClick(e, loan)}
-                                >
+                                <button className="btn btn-sm btn-dark" onClick={(e) => handleNoticeClick(e, loan)}>
                                     <i className="bi bi-pencil-square me-1"></i> Notice
                                 </button>
                             </td>
@@ -121,12 +100,7 @@ const OverdueLoansPage = () => {
         </div>
       </div>
 
-      <NoticeModal 
-        show={showNoticeModal} 
-        onClose={() => setShowNoticeModal(false)} 
-        loan={selectedLoan} 
-      />
-
+      <NoticeModal show={showNoticeModal} onClose={() => setShowNoticeModal(false)} loan={selectedLoan} />
     </div>
   );
 };
