@@ -245,9 +245,11 @@ function LoanPage({ userRole }) {
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
   const totalPaidBack = calculatedStats ? (parseFloat(calculatedStats.principalPaid) + parseFloat(calculatedStats.interestPaid)) : 0;
 
+  // --- FIX: Process Breakdown (SORT BY START DATE FOR CORRECT ORDER) ---
   const processedBreakdown = useMemo(() => {
     if (!interestBreakdown || interestBreakdown.length === 0) return [];
     
+    // Sort Oldest -> Newest
     const sorted = [...interestBreakdown].sort((a, b) => {
         const dateA = new Date(a.date);
         const dateB = new Date(b.date);
@@ -255,10 +257,17 @@ function LoanPage({ userRole }) {
         const diff = dateA - dateB;
         if (diff !== 0) return diff; 
 
+        // TIE-BREAKER LOGIC UPDATED:
+        // We want Payments to appear BEFORE the new Accrual period that starts on the same day.
+        // 1. Payment/Discount (Clear previous debt)
+        // 2. Disbursement (Add new principal)
+        // 3. Accrued (Start calculating new interest)
+        
         const getPriority = (status) => {
-            if (status === 'disbursement') return 0; 
-            if (status === 'accrued') return 1;      
-            return 2;                                
+            if (status === 'payment') return 0;      // Priority 1: Payments first
+            if (status === 'disbursement') return 1; // Priority 2: Then Top-ups
+            if (status === 'accrued') return 2;      // Priority 3: Then new Accruals
+            return 3;
         };
 
         return getPriority(a.status) - getPriority(b.status);
