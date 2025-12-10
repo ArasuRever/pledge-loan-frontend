@@ -5,7 +5,6 @@ import { PrintableSaleReceipt } from './PrintableSaleReceipt';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-// Match the style from LoanPage.js exactly
 const hiddenPrintComponentStyle = {
   position: 'fixed',
   top: 0,
@@ -19,40 +18,33 @@ const hiddenPrintComponentStyle = {
 };
 
 const ForfeitLoanModal = ({ loan, stats, userRole, onClose, onSuccess }) => {
-  const [activeTab, setActiveTab] = useState('forfeit'); // 'forfeit' or 'sell'
+  const [activeTab, setActiveTab] = useState('forfeit'); 
   const [salePrice, setSalePrice] = useState('');
   const [notes, setNotes] = useState('');
   const [signatureFile, setSignatureFile] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // --- PRINT LOGIC ---
   const receiptRef = useRef(null);
   
   const handlePrint = useReactToPrint({
     content: () => receiptRef.current,
     documentTitle: `Sale-Receipt-${loan.book_loan_number || 'Loan'}`,
     onBeforeGetContent: () => {
-        if (!receiptRef.current) {
-            console.error("Print Error: Receipt reference is missing!");
-            return Promise.reject();
-        }
+        if (!receiptRef.current) return Promise.reject("Print Error: Ref missing");
     },
     onPrintError: (error) => console.error("Print Failed:", error),
   });
 
-  const onPrintClick = () => {
-      if(handlePrint) handlePrint();
-  };
-  // -------------------
+  const onPrintClick = () => { if(handlePrint) handlePrint(); };
 
-  // --- FIX: USE OUTSTANDING INTEREST (NOT TOTAL LIFETIME INTEREST) ---
+  // --- CALCULATION LOGIC ---
   const principal = parseFloat(stats?.outstandingPrincipal || 0);
-  const interest = parseFloat(stats?.outstandingInterest || 0); // <--- FIXED HERE
-  const totalPayable = principal + interest; // Should now match stats.amountDue
-  
+  const interest = parseFloat(stats?.outstandingInterest || 0); 
   const sellingPrice = parseFloat(salePrice || 0);
-  const remainingAmount = sellingPrice - totalPayable;
+  
+  // As requested: Entered Amount + Outstanding Principal + Outstanding Interest
+  const totalSum = sellingPrice + principal + interest;
 
   const canSell = ['admin', 'manager', 'super admin'].includes(userRole);
 
@@ -65,8 +57,8 @@ const ForfeitLoanModal = ({ loan, stats, userRole, onClose, onSuccess }) => {
     }
 
     const confirmMsg = activeTab === 'sell' 
-      ? `Confirm SALE?\n\nPrice: ₹${sellingPrice}\nThis will CLOSE the loan.` 
-      : `Confirm FORFEITURE?\n\nMark item as seized (Inventory)?`;
+      ? `Confirm SALE?\n\nPrice: ₹${sellingPrice}\nTotal Ref: ₹${totalSum.toLocaleString()}\nThis will CLOSE the loan.` 
+      : `Confirm FORFEITURE?\n\nMark item as seized?`;
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -115,14 +107,13 @@ const ForfeitLoanModal = ({ loan, stats, userRole, onClose, onSuccess }) => {
 
         <form onSubmit={handleSubmit} className="flex-grow-1 d-flex flex-column">
           
-          {/* --- FORFEIT TAB --- */}
           {activeTab === 'forfeit' && (
             <div className="alert alert-secondary small border-0 bg-secondary bg-opacity-10 text-secondary mb-3">
-              <i className="bi bi-info-circle-fill me-2"></i>Mark item as <strong>Seized</strong> (Internal Inventory). No immediate cash is received.
+              <i className="bi bi-info-circle-fill me-2"></i>Mark item as <strong>Seized</strong>. No cash transaction.
             </div>
           )}
 
-          {/* --- SELL TAB --- */}
+          {/* --- SELL TAB (UPDATED) --- */}
           {activeTab === 'sell' && (
             <div className="mb-3 animate__animated animate__fadeIn">
               {!canSell ? (
@@ -130,41 +121,51 @@ const ForfeitLoanModal = ({ loan, stats, userRole, onClose, onSuccess }) => {
               ) : (
                 <div className="card border-danger border-opacity-25 bg-danger bg-opacity-10 mb-3">
                   <div className="card-body p-3">
-                    
-                    {/* Item & Book Info */}
                     <div className="d-flex justify-content-between small text-muted mb-2 border-bottom border-danger border-opacity-25 pb-2">
                          <span>Loan: <strong>#{loan.book_loan_number}</strong></span>
-                         <span>Item: <strong>{loan.item_type}</strong> ({loan.gross_weight}g)</span>
-                    </div>
-
-                    {/* Cost Breakdown */}
-                    <div className="row g-1 small mb-3">
-                        <div className="col-6 text-muted">Principal:</div><div className="col-6 text-end fw-bold">₹{principal.toLocaleString()}</div>
-                        <div className="col-6 text-muted">Accrued Interest:</div><div className="col-6 text-end fw-bold">₹{interest.toLocaleString()}</div>
-                        <div className="col-12 border-top border-secondary my-1"></div>
-                        <div className="col-6 fw-bold text-dark">TOTAL PAYABLE:</div><div className="col-6 text-end fw-bold text-dark">₹{totalPayable.toLocaleString()}</div>
+                         <span>Item: <strong>{loan.item_type}</strong></span>
                     </div>
 
                     {/* Sale Input */}
-                    <div className="mb-2">
+                    <div className="mb-3">
                       <label className="form-label small fw-bold text-danger">Selling Price (₹)</label>
                       <input type="number" className="form-control fw-bold text-danger" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="Enter Sale Amount" autoFocus />
                     </div>
 
-                    {/* Net Result */}
-                    <div className="d-flex justify-content-between align-items-center pt-2 border-top border-danger border-opacity-25">
-                        <span className="small text-muted fw-bold">{remainingAmount >= 0 ? "Surplus (Profit)" : "Deficit (Loss)"}</span>
-                        <span className={`fw-bold ${remainingAmount >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {remainingAmount >= 0 ? '+' : ''}₹{remainingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </span>
+                    {/* Dynamic Calculation Display */}
+                    <div className="bg-white p-2 rounded border border-danger border-opacity-10">
+                        <div className="small fw-bold text-muted mb-1 border-bottom pb-1">Calculation Breakdown</div>
+                        
+                        <div className="d-flex justify-content-between small">
+                            <span className="text-muted">Sale Amount:</span>
+                            <span className="fw-bold text-dark">₹{sellingPrice.toLocaleString()}</span>
+                        </div>
+                        
+                        <div className="d-flex justify-content-between small mt-1">
+                            <span className="text-muted">Outstanding Principal:</span>
+                            <span className="text-dark">+ ₹{principal.toLocaleString()}</span>
+                        </div>
+                        
+                        <div className="d-flex justify-content-between small">
+                            <span className="text-muted">Outstanding Interest:</span>
+                            <span className="text-dark">+ ₹{interest.toLocaleString()}</span>
+                        </div>
+
+                        <div className="border-top my-1 border-secondary border-opacity-25"></div>
+                        
+                        <div className="d-flex justify-content-between small">
+                            {/* UPDATED: Shows Sum of Sale + Principal + Interest */}
+                            <span className="fw-bold text-muted">Total (Sale + P + I):</span>
+                            <span className="fw-bold text-danger">₹{totalSum.toLocaleString()}</span>
+                        </div>
                     </div>
+
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Common Fields */}
           <div className="mb-3">
             <label className="form-label small fw-bold text-muted">Notes</label>
             <textarea className="form-control" rows="2" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Remarks..."></textarea>
@@ -176,7 +177,6 @@ const ForfeitLoanModal = ({ loan, stats, userRole, onClose, onSuccess }) => {
           </div>
 
           <div className="mt-auto d-flex justify-content-between gap-2">
-             {/* Print Button (Only in Sell Tab) */}
              {activeTab === 'sell' && (
                  <button type="button" className="btn btn-outline-dark border shadow-sm" onClick={onPrintClick}>
                     <i className="bi bi-printer me-1"></i> Print
@@ -193,12 +193,11 @@ const ForfeitLoanModal = ({ loan, stats, userRole, onClose, onSuccess }) => {
       </div>
     </div>
     
-    {/* Hidden Print Component */}
     <div style={hiddenPrintComponentStyle}>
         <PrintableSaleReceipt 
             ref={receiptRef} 
             loan={loan} 
-            stats={{ outstandingPrincipal: principal, outstandingInterest: interest }} // Pass corrected stats
+            stats={{ outstandingPrincipal: principal, outstandingInterest: interest }} 
             salePrice={salePrice} 
             buyerNotes={notes} 
         />

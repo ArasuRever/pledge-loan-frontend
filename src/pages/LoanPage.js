@@ -12,7 +12,6 @@ import ForfeitLoanModal from '../components/ForfeitLoanModal';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-// --- Styles ---
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1050 };
 const hiddenPrintComponentStyle = { position: 'fixed', top: 0, left: 0, width: '210mm', minHeight: '297mm', zIndex: -1000, opacity: 0, pointerEvents: 'none', backgroundColor: 'white' };
 
@@ -39,7 +38,6 @@ function LoanPage({ userRole }) {
 
   const invoiceRef = useRef();
 
-  // --- Print & PDF Logic ---
   const handleReactPrint = useReactToPrint({ content: () => invoiceRef.current, documentTitle: `Loan-Invoice-${id}`, onAfterPrint: () => setShowPrintModal(false) });
 
   const handleSavePdf = async () => {
@@ -214,14 +212,11 @@ function LoanPage({ userRole }) {
 
   const enrichedDisbursements = useMemo(() => {
     if (!transactions) return [];
-    
     const chronoTxs = [...transactions].sort((a,b) => new Date(a.payment_date) - new Date(b.payment_date));
     let runningPrincipal = 0;
     
     const disbs = transactions.filter(t => t.payment_type === 'disbursement');
     const topUpTotal = disbs.reduce((sum, t) => sum + parseFloat(t.amount_paid), 0);
-    
-    // FIX: Calculate Initial Principal correctly (Current + Paid - Topups)
     const principalPaidSum = transactions.filter(t => t.payment_type === 'principal').reduce((s,t)=>s+parseFloat(t.amount_paid),0);
     const initialPrincipal = parseFloat(loanDetails?.principal_amount || 0) + principalPaidSum - topUpTotal;
     
@@ -245,34 +240,23 @@ function LoanPage({ userRole }) {
   const discountGiven = transactions?.filter(tx => tx.payment_type === 'discount').reduce((sum, tx) => sum + parseFloat(tx.amount_paid), 0) || 0;
   const totalPaidBack = calculatedStats ? (parseFloat(calculatedStats.principalPaid) + parseFloat(calculatedStats.interestPaid)) : 0;
 
-  // --- FIX: Process Breakdown (SORT BY START DATE FOR CORRECT ORDER) ---
   const processedBreakdown = useMemo(() => {
     if (!interestBreakdown || interestBreakdown.length === 0) return [];
-    
-    // Sort Oldest -> Newest
     const sorted = [...interestBreakdown].sort((a, b) => {
         const dateA = new Date(a.date);
         const dateB = new Date(b.date);
-        
         const diff = dateA - dateB;
         if (diff !== 0) return diff; 
 
-        // TIE-BREAKER LOGIC UPDATED:
-        // We want Payments to appear BEFORE the new Accrual period that starts on the same day.
-        // 1. Payment/Discount (Clear previous debt)
-        // 2. Disbursement (Add new principal)
-        // 3. Accrued (Start calculating new interest)
-        
         const getPriority = (status) => {
-            if (status === 'payment') return 0;      // Priority 1: Payments first
-            if (status === 'disbursement') return 1; // Priority 2: Then Top-ups
-            if (status === 'accrued') return 2;      // Priority 3: Then new Accruals
+            if (status === 'payment') return 0;      
+            if (status === 'disbursement') return 1; 
+            if (status === 'accrued') return 2;      
             return 3;
         };
 
         return getPriority(a.status) - getPriority(b.status);
     });
-
     return sorted; 
   }, [interestBreakdown]);
 
@@ -364,10 +348,10 @@ function LoanPage({ userRole }) {
         </div>
         <div className="col">
             <div className="card border border-secondary-subtle shadow-sm h-100 bg-white">
-                <div className={`card-body p-2 border-start border-4 rounded-start ${loanDetails.status === 'paid' ? 'border-success' : 'border-danger'}`}>
+                <div className={`card-body p-2 border-start border-4 rounded-start ${loanDetails.status === 'active' || loanDetails.status === 'overdue' ? 'border-danger' : 'border-success'}`}>
                     <div className="text-muted small text-uppercase fw-bold mb-1" style={{fontSize: '0.7rem'}}>Outstanding</div>
-                    <div className={`fs-5 fw-bold ${loanDetails.status === 'paid' ? 'text-success' : 'text-danger'}`}>
-                        {loanDetails.status === 'paid' ? 'Settled' : formatCurrency(calculatedStats?.amountDue)}
+                    <div className={`fs-5 fw-bold ${loanDetails.status === 'active' || loanDetails.status === 'overdue' ? 'text-danger' : 'text-success'}`}>
+                        {loanDetails.status === 'active' || loanDetails.status === 'overdue' ? formatCurrency(calculatedStats?.amountDue) : (loanDetails.status === 'forfeited' ? 'Forfeited' : 'Settled')}
                     </div>
                 </div>
             </div>
@@ -448,7 +432,7 @@ function LoanPage({ userRole }) {
             <div className="card border border-secondary-subtle shadow-sm mb-4">
                 <div className="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
                     <h6 className="mb-0 fw-bold text-primary"><i className="bi bi-calculator me-2"></i>Financial Worksheet</h6>
-                    {loanDetails.status === 'paid' && <span className="badge bg-success">LOAN SETTLED</span>}
+                    {(loanDetails.status === 'paid' || loanDetails.status === 'forfeited') && <span className="badge bg-success">LOAN CLOSED</span>}
                 </div>
                 <div className="card-body p-0">
                     <div className="row g-0">
@@ -511,7 +495,7 @@ function LoanPage({ userRole }) {
                                     </tbody>
                                 </table>
                             </div>
-                            {loanDetails.status !== 'paid' && (
+                            {(loanDetails.status === 'active' || loanDetails.status === 'overdue') && (
                                 <div className="alert alert-primary d-flex align-items-center justify-content-between mt-3 mb-0 p-2">
                                     <div className="small"><strong>Total Payable</strong></div>
                                     <div className="fs-5 fw-bold">{formatCurrency(calculatedStats.amountDue)}</div>
@@ -592,6 +576,7 @@ function LoanPage({ userRole }) {
                                      <strong className="text-danger fs-4">{formatCurrency(loanDetails.sale_price)}</strong>
                                  </div>
                                  <div className="col-md-3">
+                                     {/* This section calculates Result, can leave as is or remove if not needed. Keeping for completeness */}
                                      {(() => {
                                          const p = parseFloat(loanDetails.principal_amount || 0);
                                          const i = parseFloat(calculatedStats?.totalInterestOwed || 0);
@@ -658,7 +643,7 @@ function LoanPage({ userRole }) {
                 </>
                 )}
 
-                {/* B. Transaction History (Improved with DELETE Icon) */}
+                {/* Transaction History (Improved with DELETE Icon & Sale Card) */}
                 <div className="card border border-secondary-subtle shadow-sm">
                     <div className="card-header bg-white fw-bold py-2 border-bottom small">Transaction History</div>
                     <div className="card-body p-0">
@@ -667,20 +652,53 @@ function LoanPage({ userRole }) {
                             <div className="col-6 border-end">
                                 <div className="p-1 bg-light small fw-bold text-center text-success border-bottom" style={{fontSize: '0.7rem'}}>Payments In</div>
                                 <div className="p-2">
-                                    {paymentsReceived.length > 0 ? paymentsReceived.slice(0, 8).map(tx => (
-                                        <div key={tx.id} className="mb-2 pb-1 border-bottom border-light position-relative group-hover">
-                                            <span className={`badge border mb-1 ${tx.payment_type === 'discount' ? 'bg-warning text-dark' : 'bg-light text-dark'}`} style={{fontSize: '0.65rem'}}>{tx.payment_type.toUpperCase()}</span>
-                                            <div className={`fw-bold small ${tx.payment_type === 'discount' ? 'text-danger' : 'text-success'}`}>
-                                                {tx.payment_type === 'discount' ? '-' : ''}{formatCurrency(tx.amount_paid)}
-                                            </div>
-                                            <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
+                                    {paymentsReceived.length > 0 ? paymentsReceived.slice(0, 8).map(tx => {
+                                        // SPECIAL CARD FOR SALE TRANSACTION (UPDATED)
+                                        if (tx.payment_type === 'sale') {
+                                            const p = parseFloat(calculatedStats?.outstandingPrincipal || 0);
+                                            const i = parseFloat(calculatedStats?.totalInterestOwed || 0);
+                                            const costBasis = p + i;
+                                            const salePrice = parseFloat(tx.amount_paid);
+                                            const totalVal = salePrice + costBasis; // Sum as per logic
                                             
-                                            {/* DELETE BUTTON */}
-                                            <button className="btn btn-link p-0 position-absolute top-0 end-0 text-danger opacity-50 hover-opacity-100" style={{fontSize:'0.8rem'}} onClick={() => handleDeleteTransaction(tx.id)} title="Undo Transaction">
-                                                <i className="bi bi-trash"></i>
-                                            </button>
-                                        </div>
-                                    )) : <div className="text-center text-muted small py-3">No payments</div>}
+                                            return (
+                                                <div key={tx.id} className="mb-2 p-2 border border-danger bg-danger bg-opacity-10 rounded position-relative">
+                                                     <div className="fw-bold text-danger text-center small mb-1">ITEM SOLD</div>
+                                                     
+                                                     <div className="d-flex justify-content-between small text-muted"><span>Sold For:</span><span className="fw-bold text-danger">{formatCurrency(tx.amount_paid)}</span></div>
+                                                     <div className="text-center text-muted" style={{fontSize: '0.6rem'}}>{formatDateTime(tx.payment_date)}</div>
+                                                     
+                                                     <div className="border-top border-danger border-opacity-25 my-1"></div>
+                                                     
+                                                     <div className="small fw-bold text-muted mb-1" style={{fontSize: '0.65rem'}}>CALCULATION</div>
+                                                     <div className="d-flex justify-content-between small text-muted" style={{fontSize: '0.65rem'}}><span>Principal:</span><span>{formatCurrency(p)}</span></div>
+                                                     <div className="d-flex justify-content-between small text-muted" style={{fontSize: '0.65rem'}}><span>Interest:</span><span>{formatCurrency(i)}</span></div>
+                                                     <div className="d-flex justify-content-between small text-dark fw-bold mt-1" style={{fontSize: '0.7rem'}}><span>Amount we bought it for:</span><span>{formatCurrency(costBasis)}</span></div>
+                                                     <div className="d-flex justify-content-between small text-dark fw-bold mt-1" style={{fontSize: '0.7rem'}}><span>Total (S+P+I):</span><span>{formatCurrency(totalVal)}</span></div>
+
+                                                     {/* DELETE BUTTON */}
+                                                     <button className="btn btn-link p-0 position-absolute top-0 end-0 text-danger opacity-50 hover-opacity-100 me-1 mt-1" style={{fontSize:'0.8rem'}} onClick={() => handleDeleteTransaction(tx.id)} title="Undo Sale">
+                                                         <i className="bi bi-trash"></i>
+                                                     </button>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div key={tx.id} className="mb-2 pb-1 border-bottom border-light position-relative group-hover">
+                                                <span className={`badge border mb-1 ${tx.payment_type === 'discount' ? 'bg-warning text-dark' : 'bg-light text-dark'}`} style={{fontSize: '0.65rem'}}>{tx.payment_type.toUpperCase()}</span>
+                                                <div className={`fw-bold small ${tx.payment_type === 'discount' ? 'text-danger' : 'text-success'}`}>
+                                                    {tx.payment_type === 'discount' ? '-' : ''}{formatCurrency(tx.amount_paid)}
+                                                </div>
+                                                <div className="text-muted" style={{fontSize: '0.65rem'}}>{formatDateTime(tx.payment_date)}</div>
+                                                
+                                                {/* DELETE BUTTON */}
+                                                <button className="btn btn-link p-0 position-absolute top-0 end-0 text-danger opacity-50 hover-opacity-100" style={{fontSize:'0.8rem'}} onClick={() => handleDeleteTransaction(tx.id)} title="Undo Transaction">
+                                                    <i className="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        );
+                                    }) : <div className="text-center text-muted small py-3">No payments</div>}
                                 </div>
                             </div>
                             
