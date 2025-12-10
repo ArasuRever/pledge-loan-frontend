@@ -155,7 +155,7 @@ const ForfeitLoanModal = ({ loan, stats, userRole, onClose, onSuccess }) => {
                         
                         <div className="d-flex justify-content-between small">
                             {/* UPDATED: Shows Sum of Sale + Principal + Interest */}
-                            <span className="fw-bold text-muted">Total (Sale + P + I):</span>
+                            <span className="fw-bold text-muted">Total (Sale + Outstanding Principal + Outstanding Interest):</span>
                             <span className="fw-bold text-danger">₹{totalSum.toLocaleString()}</span>
                         </div>
                     </div>
